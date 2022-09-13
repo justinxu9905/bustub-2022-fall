@@ -47,7 +47,7 @@ class TrieNode {
    *
    * @param other_trie_node Old trie node.
    */
-  TrieNode(TrieNode &&other_trie_node) noexcept ;
+  TrieNode(TrieNode &&other_trie_node) noexcept;
 
   /**
    * @brief Destroy the TrieNode object.
@@ -62,7 +62,7 @@ class TrieNode {
    * @param key_char Key char of child node.
    * @return True if this trie node has a child with given key, false otherwise.
    */
-  bool HasChild(char key_char) const ;
+  bool HasChild(char key_char) const;
 
   /**
    * TODO(P0): Add implementation
@@ -72,7 +72,7 @@ class TrieNode {
    *
    * @return True if this trie node has any child node, false if it has no child node.
    */
-  bool HasChildren() const ;
+  bool HasChildren() const;
 
   /**
    * TODO(P0): Add implementation
@@ -81,7 +81,7 @@ class TrieNode {
    *
    * @return True if is_end_ flag is true, false if is_end_ is false.
    */
-  bool IsEndNode() const ;
+  bool IsEndNode() const;
 
   /**
    * TODO(P0): Add implementation
@@ -90,7 +90,7 @@ class TrieNode {
    *
    * @return key_char_ of this trie node.
    */
-  char GetKeyChar() const ;
+  char GetKeyChar() const;
 
   /**
    * TODO(P0): Add implementation
@@ -183,7 +183,7 @@ class TrieNodeWithValue : public TrieNode {
    * @param trieNode TrieNode whose data is to be moved to TrieNodeWithValue
    * @param value
    */
-  TrieNodeWithValue(TrieNode &&trieNode, T value): TrieNode(std::move(trieNode)) {
+  TrieNodeWithValue(TrieNode &&trieNode, T value) : TrieNode(std::move(trieNode)) {
     value_ = value;
     is_end_ = true;
   }
@@ -201,7 +201,7 @@ class TrieNodeWithValue : public TrieNode {
    * @param key_char Key char of this node
    * @param value Value of this node
    */
-  TrieNodeWithValue(char key_char, T value): TrieNode(key_char) {
+  TrieNodeWithValue(char key_char, T value) : TrieNode(key_char) {
     key_char_ = key_char;
     value_ = value;
     is_end_ = true;
@@ -238,9 +238,7 @@ class Trie {
    * @brief Construct a new Trie object. Initialize the root node with '\0'
    * character.
    */
-  Trie() {
-    root_ = std::make_unique<TrieNode>('\0');
-  }
+  Trie() { root_ = std::make_unique<TrieNode>('\0'); }
 
   /**
    * TODO(P0): Add implementation
@@ -274,7 +272,7 @@ class Trie {
       return false;
     }
     latch_.WLock();
-    std::unique_ptr<TrieNode> * cur = &root_;
+    std::unique_ptr<TrieNode> *cur = &root_;
     for (auto v : key) {
       if (!(*cur)->HasChild(v)) {
         (*cur)->InsertChildNode(v, std::make_unique<TrieNode>(v));
@@ -289,7 +287,7 @@ class Trie {
     *cur = std::move(leaf);
     latch_.WUnlock();
     return true;
-  };
+  }
 
   /**
    * TODO(P0): Add implementation
@@ -310,13 +308,13 @@ class Trie {
    */
   bool Remove(const std::string &key) {
     latch_.WLock();
-    std::unique_ptr<TrieNode> * cur = &root_;
+    std::unique_ptr<TrieNode> *cur = &root_;
     bool res = DfsRemove(cur, key);
     latch_.WUnlock();
     return res;
   }
 
-  bool DfsRemove(std::unique_ptr<TrieNode> * cur, std::string key) {
+  bool DfsRemove(std::unique_ptr<TrieNode> *cur, std::string key) {
     if (*cur == nullptr) {
       return true;
     }
@@ -355,7 +353,7 @@ class Trie {
   template <typename T>
   T GetValue(const std::string &key, bool *success) {
     latch_.RLock();
-    std::unique_ptr<TrieNode> * cur = &root_;
+    std::unique_ptr<TrieNode> *cur = &root_;
     for (auto &v : key) {
       if (*cur == nullptr) {
         latch_.RUnlock();
@@ -374,7 +372,7 @@ class Trie {
       *success = false;
       return {};
     }
-    auto * leaf = dynamic_cast<TrieNodeWithValue<T> *>((*cur).get());
+    auto *leaf = dynamic_cast<TrieNodeWithValue<T> *>((*cur).get());
     latch_.RUnlock();
     *success = true;
     return leaf->GetValue();

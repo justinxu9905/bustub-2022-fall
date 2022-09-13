@@ -14,7 +14,6 @@
 
 #include <list>
 #include <mutex>  // NOLINT
-#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -52,7 +51,7 @@ class LRUReplacer : public Replacer {
   struct node {
     frame_id_t key;
     node *prev, *next;
-    node(frame_id_t k, node *p = NULL, node *n = NULL) : key(k), prev(p), next(n) {}
+    explicit node(frame_id_t k, node *p = NULL, node *n = NULL) : key(k), prev(p), next(n) {}
     ~node() {
       delete prev;
       delete next;
