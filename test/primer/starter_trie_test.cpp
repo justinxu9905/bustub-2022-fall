@@ -41,7 +41,7 @@ std::vector<std::string> GenerateNRandomString(int n) {
   return rand_strs;
 }
 
-TEST(StarterTest, DISABLED_TrieNodeInsertTest) {
+TEST(StarterTest, TrieNodeInsertTest) {
   // Test Insert
   //  When same key is inserted twice, insert should return nullptr
   // When inserted key and unique_ptr's key does not match, return nullptr
@@ -60,7 +60,7 @@ TEST(StarterTest, DISABLED_TrieNodeInsertTest) {
   EXPECT_EQ((*child_node)->GetKeyChar(), 'c');
 }
 
-TEST(StarterTest, DISABLED_TrieNodeRemoveTest) {
+TEST(StarterTest, TrieNodeRemoveTest) {
   auto t = TrieNode('a');
   __attribute__((unused)) auto child_node = t.InsertChildNode('b', std::make_unique<TrieNode>('b'));
   child_node = t.InsertChildNode('c', std::make_unique<TrieNode>('c'));
@@ -78,7 +78,7 @@ TEST(StarterTest, DISABLED_TrieNodeRemoveTest) {
   EXPECT_EQ(child_node, nullptr);
 }
 
-TEST(StarterTest, DISABLED_TrieInsertTest) {
+TEST(StarterTest, TrieInsertTest) {
   {
     Trie trie;
     trie.Insert<std::string>("abc", "d");
@@ -95,6 +95,22 @@ TEST(StarterTest, DISABLED_TrieInsertTest) {
     EXPECT_EQ(success, false);
     trie.GetValue<std::string>("", &success);
     EXPECT_EQ(success, false);
+  }
+
+  // Insert multiple keys
+  {
+    Trie trie;
+    bool success = trie.Insert<int>("abc", 5);
+    EXPECT_EQ(success, true);
+
+    success = trie.Insert<int>("abcd", 6);
+    EXPECT_EQ(success, true);
+
+    EXPECT_EQ(trie.GetValue<int>("abc", &success), 5);
+    EXPECT_EQ(success, true);
+
+    EXPECT_EQ(trie.GetValue<int>("abcd", &success), 6);
+    EXPECT_EQ(success, true);
   }
 
   // Insert duplicated key should not modify existing value
@@ -116,12 +132,12 @@ TEST(StarterTest, DISABLED_TrieInsertTest) {
     Trie trie;
     bool success = trie.Insert<int>("a", 5);
     EXPECT_EQ(success, true);
-    success = trie.Insert<std::string>("aa", "val");
+    success = trie.Insert<std::string>("ab", "val");
     EXPECT_EQ(success, true);
 
     EXPECT_EQ(trie.GetValue<int>("a", &success), 5);
     EXPECT_EQ(success, true);
-    EXPECT_EQ(trie.GetValue<std::string>("aa", &success), "val");
+    EXPECT_EQ(trie.GetValue<std::string>("ab", &success), "val");
     EXPECT_EQ(success, true);
 
     trie.GetValue<int>("aaaa", &success);
@@ -129,7 +145,7 @@ TEST(StarterTest, DISABLED_TrieInsertTest) {
   }
 }
 
-TEST(StarterTrieTest, DISABLED_RemoveTest) {
+TEST(StarterTrieTest, RemoveTest) {
   {
     Trie trie;
     bool success = trie.Insert<int>("a", 5);
@@ -162,7 +178,7 @@ TEST(StarterTrieTest, DISABLED_RemoveTest) {
   }
 }
 
-TEST(StarterTrieTest, DISABLED_ConcurrentTest1) {
+TEST(StarterTrieTest, ConcurrentTest1) {
   Trie trie;
   constexpr int num_words = 1000;
   constexpr int num_bits = 10;
