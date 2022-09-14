@@ -79,6 +79,7 @@ TEST(StarterTest, TrieNodeRemoveTest) {
 }
 
 TEST(StarterTest, TrieInsertTest) {
+  // Simple happy case
   {
     Trie trie;
     trie.Insert<std::string>("abc", "d");
@@ -100,16 +101,19 @@ TEST(StarterTest, TrieInsertTest) {
   // Insert multiple keys
   {
     Trie trie;
-    bool success = trie.Insert<int>("abc", 5);
+    bool success = trie.Insert<int>("aaa", 5);
     EXPECT_EQ(success, true);
 
-    success = trie.Insert<int>("abcd", 6);
+    success = trie.Insert<int>("aa", 6);
     EXPECT_EQ(success, true);
 
-    EXPECT_EQ(trie.GetValue<int>("abc", &success), 5);
+    EXPECT_EQ(trie.GetValue<int>("aaa", &success), 5);
     EXPECT_EQ(success, true);
 
-    EXPECT_EQ(trie.GetValue<int>("abcd", &success), 6);
+    EXPECT_EQ(trie.GetValue<int>("aa", &success), 6);
+    EXPECT_EQ(success, true);
+
+    EXPECT_EQ(trie.GetValue<int>("aaa", &success), 5);
     EXPECT_EQ(success, true);
   }
 
@@ -141,6 +145,22 @@ TEST(StarterTest, TrieInsertTest) {
     EXPECT_EQ(success, true);
 
     trie.GetValue<int>("aaaa", &success);
+    EXPECT_EQ(success, false);
+  }
+
+  // Insecure cases
+  {
+    Trie trie;
+    bool success = trie.Insert<int>("abc", 5);
+    EXPECT_EQ(success, true);
+
+    EXPECT_EQ(trie.GetValue<int>("ab", &success), NULL);
+    EXPECT_EQ(success, false);
+
+    EXPECT_EQ(trie.GetValue<int>("abcd", &success), NULL);
+    EXPECT_EQ(success, false);
+
+    EXPECT_EQ(trie.GetValue<int>("b", &success), NULL);
     EXPECT_EQ(success, false);
   }
 }
