@@ -22,6 +22,7 @@
 #include <mutex>  // NOLINT
 #include <utility>
 #include <vector>
+#include <iostream>
 
 #include "container/hash/hash_table.h"
 
@@ -105,6 +106,19 @@ class ExtendibleHashTable : public HashTable<K, V> {
    */
   auto Remove(const K &key) -> bool override;
 
+  /*void Display() {
+    std::cout << "Display: " << std::endl;
+    for (int i = 0; i < int(dir_.size()); i++) {
+      std::shared_ptr<Bucket> dir = dir_[i];
+      std::list<std::pair<K, V>> items = dir->GetItems();
+      std::cout << "dir " << i << std::endl;
+      for (auto item : items) {
+        std::cout << item.first << " " << item.second << std::endl;
+      }
+    }
+    std::cout << std::endl;
+  }*/
+
   /**
    * Bucket class for each hash table bucket that the directory points to.
    */
@@ -181,6 +195,45 @@ class ExtendibleHashTable : public HashTable<K, V> {
    * @param bucket The bucket to be redistributed.
    */
   auto RedistributeBucket(std::shared_ptr<Bucket> bucket) -> void;
+
+  auto SplitBucket(int idx) -> void {
+    int pair_idx;
+    int idx_diff;
+    int dir_size;
+    int local_depth;
+    std::shared_ptr<Bucket> bucket;
+    std::shared_ptr<Bucket> pair_bucket;
+
+    bucket = dir_[idx];
+    local_depth = bucket->GetDepth();
+    pair_bucket = std::make_shared<Bucket>(bucket_size_, local_depth);
+    pair_idx = idx ^ (1 << (local_depth - 1));
+    dir_[pair_idx] = pair_bucket;
+    num_buckets_++;
+    idx_diff = 1 << local_depth;
+    dir_size = 1 << global_depth_;
+
+    std::list<std::pair<K, V>> items;
+    std::copy(bucket->GetItems().begin(), bucket->GetItems().end(), std::back_inserter(items));
+    bucket->GetItems().clear();
+    std::pair<K, V> item;
+
+    for (int i = pair_idx - idx_diff; i >= 0; i -= idx_diff) {
+      dir_[i] = dir_[pair_idx];
+    }
+    for (int i = pair_idx + idx_diff; i < dir_size; i += idx_diff) {
+      dir_[i] = dir_[pair_idx];
+    }
+
+    int n = items.size();
+    for (int i = 0; i < n; i++) {
+      item = items.front();
+      InsertInternal(item.first, item.second);
+      items.pop_front();
+    }
+  };
+
+  void InsertInternal(const K &key, const V &value);
 
   /*****************************************************************
    * Must acquire latch_ first before calling the below functions. *
