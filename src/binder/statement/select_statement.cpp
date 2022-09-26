@@ -1,5 +1,7 @@
 #include <memory>
 
+#include "binder/bound_order_by.h"
+#include "common/util/string_util.h"
 #include "fmt/format.h"
 #include "fmt/ranges.h"
 
@@ -14,16 +16,26 @@ SelectStatement::SelectStatement(std::unique_ptr<BoundTableRef> table,
                                  std::vector<std::unique_ptr<BoundExpression>> select_list,
                                  std::unique_ptr<BoundExpression> where,
                                  std::vector<std::unique_ptr<BoundExpression>> group_by,
-                                 std::unique_ptr<BoundExpression> having)
+                                 std::unique_ptr<BoundExpression> having, std::unique_ptr<BoundExpression> limit_count,
+                                 std::unique_ptr<BoundExpression> limit_offset,
+                                 std::vector<std::unique_ptr<BoundOrderBy>> sort, bool is_distinct)
     : BoundStatement(StatementType::SELECT_STATEMENT),
       table_(std::move(table)),
       select_list_(std::move(select_list)),
       where_(std::move(where)),
       group_by_(std::move(group_by)),
-      having_(std::move(having)) {}
+      having_(std::move(having)),
+      limit_count_(std::move(limit_count)),
+      limit_offset_(std::move(limit_offset)),
+      sort_(std::move(sort)),
+      is_distinct_(is_distinct) {}
 
 auto SelectStatement::ToString() const -> std::string {
-  return fmt::format("BoundSelect {{\n  table={},\n  columns={},\n  groupBy={},\n  having={},\n  where={}\n}}", table_,
-                     select_list_, group_by_, having_, where_);
+  return fmt::format(
+      "BoundSelect {{\n  table={},\n  columns={},\n  groupBy={},\n  having={},\n  where={},\n  limit={},\n  "
+      "offset={},\n  order_by={},\n  is_distinct={},\n}}",
+      StringUtil::IndentAllLines(table_->ToString(), 2, true), select_list_, group_by_, having_, where_, limit_count_,
+      limit_offset_, sort_, is_distinct_);
 }
+
 }  // namespace bustub

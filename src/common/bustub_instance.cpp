@@ -1,12 +1,15 @@
 #include "common/bustub_instance.h"
 #include "binder/binder.h"
+#include "binder/bound_expression.h"
 #include "binder/bound_statement.h"
 #include "binder/statement/create_statement.h"
+#include "binder/statement/explain_statement.h"
 #include "binder/statement/select_statement.h"
 #include "buffer/buffer_pool_manager_instance.h"
 #include "catalog/schema.h"
 #include "catalog/table_generator.h"
 #include "common/enums/statement_type.h"
+#include "common/exception.h"
 #include "concurrency/lock_manager.h"
 #include "execution/execution_engine.h"
 #include "execution/executor_context.h"
@@ -38,7 +41,12 @@ BustubInstance::BustubInstance(const std::string &db_file_name) {
 
   // We need more frames for GenerateTestTable to work. Therefore, we use 128 instead of the default
   // buffer pool size specified in `config.h`.
-  buffer_pool_manager_ = new BufferPoolManagerInstance(128, disk_manager_, LRUK_REPLACER_K, log_manager_);
+  try {
+    buffer_pool_manager_ = new BufferPoolManagerInstance(128, disk_manager_, LRUK_REPLACER_K, log_manager_);
+  } catch (NotImplementedException &e) {
+    std::cerr << "BufferPoolManager is not implemented, only mock tables are supported." << std::endl;
+    buffer_pool_manager_ = nullptr;
+  }
 
   // Transaction (txn) related.
   lock_manager_ = new LockManager();
@@ -84,17 +92,33 @@ auto BustubInstance::ExecuteSql(const std::string &sql) -> std::vector<std::stri
   binder.ParseAndBindQuery(sql);
   std::vector<std::string> result = {};
   for (const auto &statement : binder.statements_) {
-    // Bind the query.
-    std::cerr << "=== BINDER ===" << std::endl;
-    std::cerr << statement->ToString() << std::endl;
-
     switch (statement->type_) {
       case StatementType::CREATE_STATEMENT: {
         const auto &create_stmt = dynamic_cast<const CreateStatement &>(*statement);
         auto txn = transaction_manager_->Begin();
         catalog_->CreateTable(txn, create_stmt.table_, Schema(create_stmt.columns_));
-        // TODO(chi): decide commit or abort the transaction after transaction manager is implemented.
+        transaction_manager_->Commit(txn);
         delete txn;
+        continue;
+      }
+      case StatementType::EXPLAIN_STATEMENT: {
+        const auto &explain_stmt = dynamic_cast<const ExplainStatement &>(*statement);
+
+        // Print binder result.
+        std::cerr << "=== BINDER ===" << std::endl;
+        std::cerr << statement->ToString() << std::endl;
+
+        // Print planner result.
+        bustub::Planner planner(*catalog_);
+        planner.PlanQuery(*explain_stmt.statement_);
+        std::cerr << "=== PLANNER ===" << std::endl;
+        std::cerr << planner.plan_->ToString() << std::endl;
+
+        // Print optimizer result.
+        bustub::Optimizer optimizer(*catalog_);
+        auto optimized_plan = optimizer.Optimize(planner.plan_);
+        std::cerr << "=== OPTIMIZER ===" << std::endl;
+        std::cerr << optimized_plan->ToString() << std::endl;
         continue;
       }
       default:
@@ -104,14 +128,10 @@ auto BustubInstance::ExecuteSql(const std::string &sql) -> std::vector<std::stri
     // Plan the query.
     bustub::Planner planner(*catalog_);
     planner.PlanQuery(*statement);
-    std::cerr << "=== PLANNER ===" << std::endl;
-    std::cerr << planner.plan_->ToString() << std::endl;
 
     // Optimize the query.
     bustub::Optimizer optimizer(*catalog_);
-    auto optimized_plan = optimizer.Optimize(planner.plan_.get());
-    std::cerr << "=== OPTIMIZER ===" << std::endl;
-    std::cerr << optimized_plan->ToString() << std::endl;
+    auto optimized_plan = optimizer.Optimize(planner.plan_);
 
     // Execute the query.
     auto txn = transaction_manager_->Begin();
@@ -119,7 +139,7 @@ auto BustubInstance::ExecuteSql(const std::string &sql) -> std::vector<std::stri
     std::vector<Tuple> result_set{};
     execution_engine_->Execute(optimized_plan, &result_set, txn, exec_ctx.get());
 
-    // TODO(chi): decide commit or abort the transaction after transaction manager is implemented.
+    transaction_manager_->Commit(txn);
     delete txn;
 
     // Return the result set as a vector of string.
@@ -127,7 +147,7 @@ auto BustubInstance::ExecuteSql(const std::string &sql) -> std::vector<std::stri
 
     // Generate header for the result set.
     std::string header;
-    for (const auto &column : schema->GetColumns()) {
+    for (const auto &column : schema.GetColumns()) {
       header += column.GetName();
       header += "\t";
     }
@@ -136,8 +156,8 @@ auto BustubInstance::ExecuteSql(const std::string &sql) -> std::vector<std::stri
     // Transforming result set into strings.
     for (const auto &tuple : result_set) {
       std::string row;
-      for (uint32_t i = 0; i < schema->GetColumnCount(); i++) {
-        row += tuple.GetValue(schema, i).ToString();
+      for (uint32_t i = 0; i < schema.GetColumnCount(); i++) {
+        row += tuple.GetValue(&schema, i).ToString();
         row += "\t";
       }
       result.emplace_back(std::move(row));
@@ -157,7 +177,7 @@ void BustubInstance::GenerateTestTable() {
   TableGenerator gen{exec_ctx.get()};
   gen.GenerateTestTables();
 
-  // TODO(chi): decide commit or abort the transaction after trasnalction manager is implemented.
+  transaction_manager_->Commit(txn);
   delete txn;
 }
 
@@ -183,7 +203,7 @@ void BustubInstance::GenerateMockTable() {
   auto mock_table_3_schema = Schema(mock_table_3_columns);
   catalog_->CreateTable(txn, "__mock_table_3", mock_table_3_schema, false);
 
-  // TODO(chi): decide commit or abort the transaction after trasnalction manager is implemented.
+  transaction_manager_->Commit(txn);
   delete txn;
 }
 

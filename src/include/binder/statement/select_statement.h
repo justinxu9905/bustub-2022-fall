@@ -17,6 +17,7 @@ namespace bustub {
 class Catalog;
 class BoundTableRef;
 class BoundExpression;
+class BoundOrderBy;
 
 class SelectStatement : public BoundStatement {
  public:
@@ -24,7 +25,10 @@ class SelectStatement : public BoundStatement {
                            std::vector<std::unique_ptr<BoundExpression>> select_list,
                            std::unique_ptr<BoundExpression> where,
                            std::vector<std::unique_ptr<BoundExpression>> group_by,
-                           std::unique_ptr<BoundExpression> having);
+                           std::unique_ptr<BoundExpression> having, std::unique_ptr<BoundExpression> limit_count,
+                           std::unique_ptr<BoundExpression> limit_offset,
+                           std::vector<std::unique_ptr<BoundOrderBy>> sort, bool is_distinct);
+
   /** Bound FROM clause. */
   std::unique_ptr<BoundTableRef> table_;
 
@@ -39,6 +43,18 @@ class SelectStatement : public BoundStatement {
 
   /** Bound HAVING clause. */
   std::unique_ptr<BoundExpression> having_;
+
+  /** Bound LIMIT clause. */
+  std::unique_ptr<BoundExpression> limit_count_;
+
+  /** Bound OFFSET clause. */
+  std::unique_ptr<BoundExpression> limit_offset_;
+
+  /** Bound ORDER BY clause. */
+  std::vector<std::unique_ptr<BoundOrderBy>> sort_;
+
+  /** Is SELECT DISTINCT */
+  bool is_distinct_;
 
   auto ToString() const -> std::string override;
 };

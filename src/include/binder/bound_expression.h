@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include "common/macros.h"
 #include "fmt/format.h"
 
 namespace bustub {
@@ -18,7 +19,8 @@ enum class ExpressionType : uint8_t {
   AGG_CALL = 6,   /**< Aggregation function expression type. */
   STAR = 7,       /**< Star expression type, will be rewritten by binder and won't appear in plan. */
   UNARY_OP = 8,   /**< Unary expression type. */
-  BINARY_OP = 9   /**< Binary expression type. */
+  BINARY_OP = 9,  /**< Binary expression type. */
+  ALIAS = 10,     /**< Alias expression type. */
 };
 
 /**
@@ -30,9 +32,11 @@ class BoundExpression {
   BoundExpression() = default;
   virtual ~BoundExpression() = default;
 
-  virtual auto ToString() const -> std::string { return "<invalid>"; };
+  virtual auto ToString() const -> std::string { return ""; };
 
   auto IsInvalid() const -> bool { return type_ == ExpressionType::INVALID; }
+
+  virtual auto HasAggregation() const -> bool { UNREACHABLE("has aggregation should have been implemented!"); }
 
   /** The type of this expression. */
   ExpressionType type_{ExpressionType::INVALID};
@@ -90,6 +94,9 @@ struct fmt::formatter<bustub::ExpressionType> : formatter<string_view> {
         break;
       case bustub::ExpressionType::BINARY_OP:
         name = "BinaryOperation";
+        break;
+      case bustub::ExpressionType::ALIAS:
+        name = "Alias";
         break;
       default:
         name = "Unknown";

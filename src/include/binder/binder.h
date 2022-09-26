@@ -37,19 +37,18 @@
 #include <string>
 
 #include "binder/simplified_token.h"
-#include "binder/statement/create_statement.h"
-#include "catalog/column.h"
-#include "common/macros.h"
-#include "nodes/parsenodes.hpp"
-#include "type/type_id.h"
-#include "type/value.h"
-
 #include "binder/tokens.h"
 #include "catalog/catalog.h"
+#include "catalog/column.h"
+#include "common/macros.h"
 #include "common/util/string_util.h"
 #include "fmt/format.h"
+#include "nodes/parsenodes.hpp"
+#include "nodes/pg_list.hpp"
 #include "pg_definitions.hpp"
 #include "postgres_parser.hpp"
+#include "type/type_id.h"
+#include "type/value.h"
 
 namespace duckdb_libpgquery {
 struct PGList;
@@ -67,10 +66,14 @@ struct PGJoinExpr;
 namespace bustub {
 
 class Catalog;
-
 class BoundExpression;
 class BoundTableRef;
 class BoundExpression;
+class BoundExpressionListRef;
+class BoundOrderBy;
+class SelectStatement;
+class CreateStatement;
+class ExplainStatement;
 
 /**
  * The binder is responsible for transforming the Postgres parse tree to a binder tree
@@ -109,11 +112,15 @@ class Binder {
   // The following parts are undocumented. One `BindXXX` functions simply corresponds to a
   // node type in the Postgres parse tree.
 
+  auto BindExplain(duckdb_libpgquery::PGExplainStmt *stmt) -> std::unique_ptr<ExplainStatement>;
+
   auto BindCreate(duckdb_libpgquery::PGCreateStmt *pg_stmt) -> std::unique_ptr<CreateStatement>;
 
   auto BindColumnDefinition(duckdb_libpgquery::PGColumnDef *cdef) -> Column;
 
   auto BindSelect(duckdb_libpgquery::PGSelectStmt *pg_stmt) -> std::unique_ptr<SelectStatement>;
+
+  auto BindRangeSubselect(duckdb_libpgquery::PGRangeSubselect *root) -> std::unique_ptr<BoundTableRef>;
 
   auto BindSelectList(duckdb_libpgquery::PGList *list) -> std::vector<std::unique_ptr<BoundExpression>>;
 
@@ -152,6 +159,16 @@ class Binder {
   auto ResolveColumn(const BoundTableRef &scope, const std::vector<std::string> &col_name)
       -> std::unique_ptr<BoundExpression>;
 
+  auto BindInsert(duckdb_libpgquery::PGInsertStmt *pg_stmt) -> std::unique_ptr<InsertStatement>;
+
+  auto BindValuesList(duckdb_libpgquery::PGList *list) -> std::unique_ptr<BoundExpressionListRef>;
+
+  auto BindLimitCount(duckdb_libpgquery::PGNode *root) -> std::unique_ptr<BoundExpression>;
+
+  auto BindLimitOffset(duckdb_libpgquery::PGNode *root) -> std::unique_ptr<BoundExpression>;
+
+  auto BindSort(duckdb_libpgquery::PGList *list) -> std::vector<std::unique_ptr<BoundOrderBy>>;
+
   class ContextGuard {
    public:
     explicit ContextGuard(const BoundTableRef **scope) {
@@ -181,6 +198,9 @@ class Binder {
 
   /** The current scope for resolving column ref, used in binding expressions */
   const BoundTableRef *scope_;
+
+  /** Sometimes we will need to assign a name to some unnamed items. This variable gives them a universal ID. */
+  size_t universal_id_{0};
 };
 
 }  // namespace bustub

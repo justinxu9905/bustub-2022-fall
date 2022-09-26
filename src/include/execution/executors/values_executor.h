@@ -46,10 +46,14 @@ class ValuesExecutor : public AbstractExecutor {
   auto Next(Tuple *tuple, RID *rid) -> bool override;
 
   /** @return The output schema for the values */
-  auto GetOutputSchema() -> const Schema * override { return plan_->OutputSchema(); }
+  auto GetOutputSchema() const -> const Schema & override { return plan_->OutputSchema(); }
 
  private:
   /** The values plan node to be executed */
   const ValuesPlanNode *plan_;
+
+  const Schema dummy_schema_;
+
+  size_t cursor_;
 };
 }  // namespace bustub
