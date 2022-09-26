@@ -34,9 +34,13 @@ TEST(LRUKReplacerTest, SampleTest) {
   lru_replacer.SetEvictable(6, false);
   ASSERT_EQ(5, lru_replacer.Size());
 
+  // [6x, 5, 4, 3, 2, 1]
+
   // Scenario: Insert access history for frame 1. Now frame 1 has two access histories.
   // All other frames have max backward k-dist. The order of eviction is [2,3,4,5,1].
   lru_replacer.RecordAccess(1);
+
+  // [6x, 5, 4, 3, 2] [1]
 
   // Scenario: Evict three pages from the replacer. Elements with max k-distance should be popped
   // first based on LRU.
@@ -47,6 +51,8 @@ TEST(LRUKReplacerTest, SampleTest) {
   ASSERT_EQ(3, value);
   lru_replacer.Evict(&value);
   ASSERT_EQ(4, value);
+
+  // [6x, 5] [1]
   ASSERT_EQ(2, lru_replacer.Size());
 
   // Scenario: Now replacer has frames [5,1].
@@ -59,29 +65,39 @@ TEST(LRUKReplacerTest, SampleTest) {
   lru_replacer.SetEvictable(4, true);
   ASSERT_EQ(4, lru_replacer.Size());
 
+  // [3, 6x] [4, 5, 1]
+
   // Scenario: continue looking for victims. We expect 3 to be evicted next.
   lru_replacer.Evict(&value);
   ASSERT_EQ(3, value);
   ASSERT_EQ(3, lru_replacer.Size());
 
+  // [6x] [4, 5, 1]
+
   // Set 6 to be evictable. 6 Should be evicted next since it has max backward k-dist.
   lru_replacer.SetEvictable(6, true);
+  // [6] [4, 5, 1]
   ASSERT_EQ(4, lru_replacer.Size());
   lru_replacer.Evict(&value);
+  // [] [4, 5, 1]
   ASSERT_EQ(6, value);
   ASSERT_EQ(3, lru_replacer.Size());
 
   // Now we have [1,5,4]. Continue looking for victims.
   lru_replacer.SetEvictable(1, false);
+  // [] [4, 5, 1x]
   ASSERT_EQ(2, lru_replacer.Size());
   ASSERT_EQ(true, lru_replacer.Evict(&value));
   ASSERT_EQ(5, value);
   ASSERT_EQ(1, lru_replacer.Size());
 
+  // [] [4, 1x]
+
   // Update access history for 1. Now we have [4,1]. Next victim is 4.
   lru_replacer.RecordAccess(1);
   lru_replacer.RecordAccess(1);
   lru_replacer.SetEvictable(1, true);
+  // [] [1, 4]
   ASSERT_EQ(2, lru_replacer.Size());
   ASSERT_EQ(true, lru_replacer.Evict(&value));
   ASSERT_EQ(value, 4);
