@@ -42,15 +42,124 @@ BufferPoolManagerInstance::~BufferPoolManagerInstance() {
   delete replacer_;
 }
 
-auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * { return nullptr; }
+auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
+  auto *frame_id = new frame_id_t;
+  if (free_list_.empty()) {
+    if (!replacer_->Evict(frame_id)) {
+      return nullptr;
+    }
+    FlushPgImp(pages_[*frame_id].GetPageId());
+  }
+  *frame_id = free_list_.front();
+  free_list_.pop_front();
 
-auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * { return nullptr; }
+  Page *new_page = new Page();
+  new_page->page_id_ = AllocatePage();
+  new_page->is_dirty_ = false;
+  new_page->pin_count_ = 1;
 
-auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> bool { return false; }
+  *page_id = new_page->page_id_;
 
-auto BufferPoolManagerInstance::FlushPgImp(page_id_t page_id) -> bool { return false; }
+  memcpy(&pages_[*frame_id], new_page, sizeof(Page));
+  delete(new_page);
 
-void BufferPoolManagerInstance::FlushAllPgsImp() {}
+  page_table_->Insert(*page_id, *frame_id);
+  replacer_->RecordAccess(*frame_id);
+  replacer_->SetEvictable(*frame_id, false);
+
+  return &pages_[*frame_id];
+}
+
+auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
+  // return if found in buffer pool
+  for (size_t i = 0; i < pool_size_; ++i) {
+    if (pages_[i].GetPageId() == page_id) {
+      pages_[i].pin_count_++;
+      return &pages_[i];
+    }
+  }
+
+  // try to vacate for the new disk fetched page
+  auto *frame_id = new frame_id_t;
+  if (free_list_.empty()) {
+    if (!replacer_->Evict(frame_id)) {
+      return nullptr;
+    }
+    FlushPgImp(pages_[*frame_id].GetPageId());
+  }
+  *frame_id = free_list_.front();
+  free_list_.pop_front();
+
+  // fetch page from disk
+  char page_data[PAGE_SIZE];
+  disk_manager_->ReadPage(page_id, page_data);
+  Page *new_page = new Page();
+  new_page->page_id_ = page_id;
+  new_page->is_dirty_ = false;
+  new_page->pin_count_ = 1;
+  memcpy(new_page->data_, page_data, PAGE_SIZE);
+
+  // store it in buffer pool
+
+  memcpy(&pages_[*frame_id], new_page, sizeof(Page));
+  delete(new_page);
+
+  page_table_->Insert(page_id, *frame_id);
+  replacer_->RecordAccess(*frame_id);
+  replacer_->SetEvictable(*frame_id, false);
+
+  return &pages_[*frame_id];
+}
+
+auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> bool {
+  frame_id_t frame_id;
+  if (!page_table_->Find(page_id, frame_id)) {
+    return false;
+  }
+
+  // find page from buffer pool
+  if (is_dirty) {
+    pages_[frame_id].is_dirty_ = true;
+  }
+  pages_[frame_id].pin_count_--;
+
+  if (pages_[frame_id].pin_count_ == 0) {
+    replacer_->SetEvictable(frame_id, true);
+  }
+  return true;
+}
+
+auto BufferPoolManagerInstance::FlushPgImp(page_id_t page_id) -> bool {
+  frame_id_t frame_id;
+  if (!page_table_->Find(page_id, frame_id)) {
+    return false;
+  }
+
+  if (pages_[frame_id].is_dirty_) {
+    disk_manager_->WritePage(page_id, pages_[frame_id].data_);
+  }
+
+  memset(&pages_[frame_id], 0, sizeof(Page));
+  free_list_.emplace_back(frame_id);
+  replacer_->Remove(frame_id);
+  page_table_->Remove(page_id);
+  return true;
+}
+
+void BufferPoolManagerInstance::FlushAllPgsImp() {
+  Page page;
+  for (frame_id_t i = 0; i < static_cast<int>(pool_size_); i++) {
+    if (pages_[i].is_dirty_) {
+      disk_manager_->WritePage(i, pages_[i].data_);
+    }
+
+    free_list_.emplace_back(i);
+    replacer_->Remove(i);
+    page_table_->Remove(pages_[i].GetPageId());
+
+    memset(&pages_[i], 0, sizeof(Page));
+  }
+}
 
 auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool { return false; }
 

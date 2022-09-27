@@ -66,8 +66,7 @@ TEST(ExtendibleHashTableTest, BigTest) {
     std::string result;
     if (op < num_ops / 2) {
       EXPECT_FALSE(table->Find(op, result));
-    }
-    else {
+    } else {
       EXPECT_TRUE(table->Find(op, result));
       EXPECT_EQ(result, op % 3 ? "a" : (op % 3 == 1 ? "b" : "c"));
     }
@@ -97,7 +96,7 @@ TEST(ExtendibleHashTableTest, ConcurrentInsertTest) {
       threads[i].join();
     }
 
-    //table->Display();
+    // table->Display();
 
     EXPECT_EQ(table->GetGlobalDepth(), 1);
     for (int i = 0; i < num_threads; i++) {

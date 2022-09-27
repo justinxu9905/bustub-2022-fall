@@ -17,12 +17,13 @@
 
 #pragma once
 
+#include <algorithm>
+#include <iostream>
 #include <list>
 #include <memory>
 #include <mutex>  // NOLINT
 #include <utility>
 #include <vector>
-#include <iostream>
 
 #include "container/hash/hash_table.h"
 

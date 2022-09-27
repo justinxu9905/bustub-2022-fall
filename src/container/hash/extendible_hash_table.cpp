@@ -15,7 +15,6 @@
 #include <functional>
 #include <list>
 #include <utility>
-#include <math.h>
 
 #include "container/hash/extendible_hash_table.h"
 #include "storage/page/page.h"
@@ -96,7 +95,7 @@ void ExtendibleHashTable<K, V>::InsertInternal(const K &key, const V &value) {
   V val;
   if (bucket->Find(key, val)) {
     if (val == value) {
-      return ;
+      return;
     }
     bucket->Remove(key);
   }
@@ -109,9 +108,9 @@ void ExtendibleHashTable<K, V>::InsertInternal(const K &key, const V &value) {
     }
     bucket->IncrementDepth();
     SplitBucket(idx);
-    //RedistributeBucket(bucket);
+    // RedistributeBucket(bucket);
     InsertInternal(key, value);
-    return ;
+    return;
   }
   bucket->Insert(key, value);
 }
@@ -139,7 +138,7 @@ ExtendibleHashTable<K, V>::Bucket::Bucket(size_t array_size, int depth) : size_(
 
 template <typename K, typename V>
 auto ExtendibleHashTable<K, V>::Bucket::Find(const K &key, V &value) -> bool {
-  for (const auto& elem : list_) {
+  for (const auto &elem : list_) {
     if (elem.first == key) {
       value = elem.second;
       return true;
