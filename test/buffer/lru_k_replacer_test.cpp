@@ -66,13 +66,16 @@ TEST(LRUKReplacerTest, SampleTest) {
   ASSERT_EQ(4, lru_replacer.Size());
 
   // [3, 6x] [4, 5, 1]
+  // new ver: [3, 6x] [4, 5, 1]
 
   // Scenario: continue looking for victims. We expect 3 to be evicted next.
+  ASSERT_EQ(4, lru_replacer.Size());
   lru_replacer.Evict(&value);
   ASSERT_EQ(3, value);
   ASSERT_EQ(3, lru_replacer.Size());
 
   // [6x] [4, 5, 1]
+  // new ver: [6x] [4, 5, 1]
 
   // Set 6 to be evictable. 6 Should be evicted next since it has max backward k-dist.
   lru_replacer.SetEvictable(6, true);
@@ -98,6 +101,7 @@ TEST(LRUKReplacerTest, SampleTest) {
   lru_replacer.RecordAccess(1);
   lru_replacer.SetEvictable(1, true);
   // [] [1, 4]
+  // new ver: [] [1, 4]
   ASSERT_EQ(2, lru_replacer.Size());
   ASSERT_EQ(true, lru_replacer.Evict(&value));
   ASSERT_EQ(value, 4);
@@ -110,7 +114,38 @@ TEST(LRUKReplacerTest, SampleTest) {
   // These operations should not modify size
   ASSERT_EQ(false, lru_replacer.Evict(&value));
   ASSERT_EQ(0, lru_replacer.Size());
+  lru_replacer.SetEvictable(0, true);
+  ASSERT_EQ(0, lru_replacer.Size());
   lru_replacer.Remove(1);
   ASSERT_EQ(0, lru_replacer.Size());
 }
+
+TEST(LRUKReplacerTest, MyTest) {
+  int num_frames = 10, k = 3;
+  LRUKReplacer lru_replacer(num_frames, k);
+  for (int i = 0; i < num_frames; i++) {
+    lru_replacer.RecordAccess(i);
+    lru_replacer.SetEvictable(i, true);
+  }
+
+  int value;
+
+  // lru_replacer is full, the first evictable elem should be popped?
+  lru_replacer.RecordAccess(11);
+  lru_replacer.Evict(&value);
+  ASSERT_EQ(1, value);
+}
+
+TEST(LRUKReplacerTest, BadCases) {
+  int num_frames = 3, k = 3;
+  LRUKReplacer lru_replacer(num_frames, k);
+
+  int value;
+  ASSERT_FALSE(lru_replacer.Evict(&value));
+
+  lru_replacer.SetEvictable(1, false);
+
+  lru_replacer.Remove(1);
+}
+
 }  // namespace bustub
