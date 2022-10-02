@@ -104,7 +104,7 @@ void LRUKReplacer::Remove(frame_id_t frame_id) {
     return;
   }
   if (evictable_.find(frame_id) == evictable_.end()) {
-    throw std::invalid_argument("frame_id should be evictable");
+    return;
   }
   history_queue_.erase(frame_id);
   cache_queue_.erase(frame_id);
