@@ -23,7 +23,7 @@ LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_fra
 auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
   std::scoped_lock<std::mutex> lock(latch_);
   // initialize frame_id with an invalid value
-  *frame_id = replacer_size_;
+  *frame_id = INVALID_FRAME_ID;
   current_timestamp_++;
   if (history_queue_.empty() && cache_queue_.empty()) {
     return false;
@@ -48,7 +48,7 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
       ts = kv_pair.second.front();
     }
   }
-  if (cache_queue_.find(*frame_id) == cache_queue_.end()) {
+  if (*frame_id == INVALID_FRAME_ID) {
     return false;
   }
   cache_queue_.erase(*frame_id);
@@ -100,12 +100,12 @@ void LRUKReplacer::Remove(frame_id_t frame_id) {
   std::scoped_lock<std::mutex> lock(latch_);
   current_timestamp_++;
 
-  if (history_queue_.find(frame_id) == history_queue_.end() && cache_queue_.find(frame_id) == cache_queue_.end()) {
+  /*if (history_queue_.find(frame_id) == history_queue_.end() && cache_queue_.find(frame_id) == cache_queue_.end()) {
     return;
   }
   if (evictable_.find(frame_id) == evictable_.end()) {
     return;
-  }
+  }*/
   history_queue_.erase(frame_id);
   cache_queue_.erase(frame_id);
   evictable_.erase(frame_id);

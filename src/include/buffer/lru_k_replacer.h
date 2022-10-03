@@ -24,6 +24,8 @@
 
 namespace bustub {
 
+static constexpr int INVALID_FRAME_ID = -1;  // invalid frame id
+
 /**
  * LRUKReplacer implements the LRU-k replacement policy.
  *
