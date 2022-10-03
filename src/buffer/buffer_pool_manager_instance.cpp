@@ -39,7 +39,7 @@ BufferPoolManagerInstance::~BufferPoolManagerInstance() {
 }
 
 auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
-  std::scoped_lock<std::mutex> lock(latch_);
+  std::lock_guard<std::mutex> lock(latch_);
   // std::cout << "[NewPgImp]" << std::endl;
   frame_id_t frame_id;
   if (free_list_.empty()) {
@@ -68,7 +68,7 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
 }
 
 auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
-  std::scoped_lock<std::mutex> lock(latch_);
+  std::lock_guard<std::mutex> lock(latch_);
   // std::cout << "[FetchPgImp] " << page_id << std::endl;
   // return if found in buffer pool
   for (size_t i = 0; i < pool_size_; ++i) {
@@ -110,7 +110,7 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
 }
 
 auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> bool {
-  std::scoped_lock<std::mutex> lock(latch_);
+  std::lock_guard<std::mutex> lock(latch_);
   // std::cout << "[UnpinPgImp] page_id " << page_id << " " << is_dirty << std::endl;
   frame_id_t frame_id;
   if (!page_table_->Find(page_id, frame_id)) {
@@ -136,7 +136,7 @@ auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> 
 }
 
 auto BufferPoolManagerInstance::FlushPgImp(page_id_t page_id) -> bool {
-  std::scoped_lock<std::mutex> lock(latch_);
+  std::lock_guard<std::mutex> lock(latch_);
   // std::cout << "[FlushPgImp] page_id " << page_id << std::endl;
   return FlushPgInternal(page_id);
 }
@@ -168,16 +168,15 @@ auto BufferPoolManagerInstance::FlushPgInternal(page_id_t page_id) -> bool {
 }
 
 void BufferPoolManagerInstance::FlushAllPgsImp() {
-  std::scoped_lock<std::mutex> lock(latch_);
+  // std::lock_guard<std::mutex> lock(latch_);
   // std::cout << "[FlushAllPgsImp]" << std::endl;
-  Page page;
   for (frame_id_t i = 0; i < static_cast<int>(pool_size_); i++) {
-    FlushPgInternal(pages_[i].GetPageId());
+    FlushPgImp(pages_[i].GetPageId());
   }
 }
 
 auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
-  std::scoped_lock<std::mutex> lock(latch_);
+  std::lock_guard<std::mutex> lock(latch_);
   // std::cout << "[DeletePgImp] page_id " << page_id << std::endl;
   frame_id_t frame_id;
   if (!page_table_->Find(page_id, frame_id)) {

@@ -100,12 +100,6 @@ void LRUKReplacer::Remove(frame_id_t frame_id) {
   std::scoped_lock<std::mutex> lock(latch_);
   current_timestamp_++;
 
-  /*if (history_queue_.find(frame_id) == history_queue_.end() && cache_queue_.find(frame_id) == cache_queue_.end()) {
-    return;
-  }
-  if (evictable_.find(frame_id) == evictable_.end()) {
-    return;
-  }*/
   history_queue_.erase(frame_id);
   cache_queue_.erase(frame_id);
   evictable_.erase(frame_id);
