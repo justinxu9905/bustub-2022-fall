@@ -109,7 +109,6 @@ void ExtendibleHashTable<K, V>::InsertInternal(const K &key, const V &value) {
     }
     bucket->IncrementDepth();
     SplitBucket(idx);
-    // RedistributeBucket(bucket);
     InsertInternal(key, value);
     return;
   }
