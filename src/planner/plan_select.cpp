@@ -24,18 +24,28 @@
 #include "execution/plans/limit_plan.h"
 #include "execution/plans/projection_plan.h"
 #include "execution/plans/sort_plan.h"
+#include "execution/plans/values_plan.h"
 #include "fmt/format.h"
 #include "planner/planner.h"
 #include "type/type_id.h"
+#include "type/value_factory.h"
 
 namespace bustub {
 
 auto Planner::PlanSelect(const SelectStatement &statement) -> AbstractPlanNodeRef {
+  auto ctx_guard = NewContext();
+  if (!statement.ctes_.empty()) {
+    ctx_.cte_list_ = &statement.ctes_;
+  }
+
   AbstractPlanNodeRef plan = nullptr;
 
   switch (statement.table_->type_) {
     case TableReferenceType::EMPTY:
-      throw Exception("select value is not supported in planner yet");
+      plan = std::make_shared<ValuesPlanNode>(
+          std::make_shared<Schema>(std::vector<Column>{}),
+          std::vector<std::vector<AbstractExpressionRef>>{std::vector<AbstractExpressionRef>{}});
+      break;
     default:
       plan = PlanTableRef(*statement.table_);
       break;
@@ -65,6 +75,9 @@ auto Planner::PlanSelect(const SelectStatement &statement) -> AbstractPlanNodeRe
     std::vector<AbstractPlanNodeRef> children = {plan};
     for (const auto &item : statement.select_list_) {
       auto [name, expr] = PlanExpression(*item, {plan});
+      if (name == UNNAMED_COLUMN) {
+        name = fmt::format("__unnamed#{}", universal_id_++);
+      }
       exprs.emplace_back(std::move(expr));
       column_names.emplace_back(std::move(name));
     }
@@ -83,7 +96,7 @@ auto Planner::PlanSelect(const SelectStatement &statement) -> AbstractPlanNodeRe
       distinct_exprs.emplace_back(std::make_shared<ColumnValueExpression>(0, col_idx++, col.GetType()));
     }
 
-    plan = std::make_shared<AggregationPlanNode>(std::make_shared<Schema>(child->OutputSchema()), child, nullptr,
+    plan = std::make_shared<AggregationPlanNode>(std::make_shared<Schema>(child->OutputSchema()), child,
                                                  std::move(distinct_exprs), std::vector<AbstractExpressionRef>{},
                                                  std::vector<AggregationType>{});
   }
@@ -106,7 +119,7 @@ auto Planner::PlanSelect(const SelectStatement &statement) -> AbstractPlanNodeRe
 
     if (!statement.limit_count_->IsInvalid()) {
       if (statement.limit_count_->type_ == ExpressionType::CONSTANT) {
-        const auto constant_expr = dynamic_cast<BoundConstant &>(*statement.limit_count_);
+        const auto &constant_expr = dynamic_cast<BoundConstant &>(*statement.limit_count_);
         const auto val = constant_expr.val_.CastAs(TypeId::INTEGER);
         if (constant_expr.val_.GetTypeId() == TypeId::INTEGER) {
           limit = std::make_optional(constant_expr.val_.GetAs<int32_t>());
@@ -120,7 +133,7 @@ auto Planner::PlanSelect(const SelectStatement &statement) -> AbstractPlanNodeRe
 
     if (!statement.limit_offset_->IsInvalid()) {
       if (statement.limit_offset_->type_ == ExpressionType::CONSTANT) {
-        const auto constant_expr = dynamic_cast<BoundConstant &>(*statement.limit_offset_);
+        const auto &constant_expr = dynamic_cast<BoundConstant &>(*statement.limit_offset_);
         const auto val = constant_expr.val_.CastAs(TypeId::INTEGER);
         if (constant_expr.val_.GetTypeId() == TypeId::INTEGER) {
           offset = std::make_optional(constant_expr.val_.GetAs<int32_t>());

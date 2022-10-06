@@ -85,8 +85,11 @@ class AbstractPlanNode {
   virtual auto GetType() const -> PlanType = 0;
 
   /** @return the string representation of the plan node and its children */
-  auto ToString() const -> std::string {
-    return fmt::format("{} | {}{}", PlanNodeToString(), output_schema_, ChildrenToString(2));
+  auto ToString(bool with_schema = true) const -> std::string {
+    if (with_schema) {
+      return fmt::format("{} | {}{}", PlanNodeToString(), output_schema_, ChildrenToString(2, with_schema));
+    }
+    return fmt::format("{}{}", PlanNodeToString(), ChildrenToString(2, with_schema));
   }
 
   /** @return the cloned plan node with new children */
@@ -107,7 +110,7 @@ class AbstractPlanNode {
   virtual auto PlanNodeToString() const -> std::string { return "<unknown>"; }
 
   /** @return the string representation of the plan node's children */
-  auto ChildrenToString(int indent) const -> std::string;
+  auto ChildrenToString(int indent, bool with_schema = true) const -> std::string;
 
  private:
 };
@@ -118,7 +121,7 @@ template <typename T>
 struct fmt::formatter<T, std::enable_if_t<std::is_base_of<bustub::AbstractPlanNode, T>::value, char>>
     : fmt::formatter<std::string> {
   template <typename FormatCtx>
-  auto format(const bustub::AbstractPlanNode &x, FormatCtx &ctx) const {
+  auto format(const T &x, FormatCtx &ctx) const {
     return fmt::formatter<std::string>::format(x.ToString(), ctx);
   }
 };
@@ -127,7 +130,7 @@ template <typename T>
 struct fmt::formatter<std::unique_ptr<T>, std::enable_if_t<std::is_base_of<bustub::AbstractPlanNode, T>::value, char>>
     : fmt::formatter<std::string> {
   template <typename FormatCtx>
-  auto format(const std::unique_ptr<bustub::AbstractPlanNode> &x, FormatCtx &ctx) const {
+  auto format(const std::unique_ptr<T> &x, FormatCtx &ctx) const {
     return fmt::formatter<std::string>::format(x->ToString(), ctx);
   }
 };

@@ -19,12 +19,14 @@
 #include "binder/statement/select_statement.h"
 #include "binder/table_ref/bound_base_table_ref.h"
 #include "binder/table_ref/bound_cross_product_ref.h"
+#include "binder/table_ref/bound_cte_ref.h"
 #include "binder/table_ref/bound_expression_list_ref.h"
 #include "binder/table_ref/bound_join_ref.h"
 #include "binder/table_ref/bound_subquery_ref.h"
 #include "binder/tokens.h"
 #include "catalog/catalog.h"
 #include "common/exception.h"
+#include "common/macros.h"
 #include "common/util/string_util.h"
 #include "fmt/core.h"
 #include "fmt/format.h"
@@ -34,6 +36,7 @@
 #include "nodes/primnodes.hpp"
 #include "pg_definitions.hpp"
 #include "postgres_parser.hpp"
+#include "type/type_id.h"
 #include "type/value_factory.h"
 
 namespace bustub {
@@ -61,14 +64,10 @@ auto Binder::BindValuesList(duckdb_libpgquery::PGList *list) -> std::unique_ptr<
   return std::make_unique<BoundExpressionListRef>(std::move(all_values), "<unnamed>");
 }
 
-auto Binder::BindRangeSubselect(duckdb_libpgquery::PGRangeSubselect *root) -> std::unique_ptr<BoundTableRef> {
-  auto subquery = BindSelect(reinterpret_cast<duckdb_libpgquery::PGSelectStmt *>(root->subquery));
-  if (root->lateral) {
-    throw NotImplementedException("LATERAL in subquery is not supported");
-  }
-
+auto Binder::BindSubquery(duckdb_libpgquery::PGSelectStmt *node, const std::string &alias)
+    -> std::unique_ptr<BoundSubqueryRef> {
   std::vector<std::vector<std::string>> select_list_name;
-
+  auto subquery = BindSelect(node);
   for (const auto &col : subquery->select_list_) {
     switch (col->type_) {
       case ExpressionType::COLUMN_REF: {
@@ -86,13 +85,41 @@ auto Binder::BindRangeSubselect(duckdb_libpgquery::PGRangeSubselect *root) -> st
         continue;
     }
   }
+  return std::make_unique<BoundSubqueryRef>(std::move(subquery), std::move(select_list_name), alias);
+}
+
+auto Binder::BindRangeSubselect(duckdb_libpgquery::PGRangeSubselect *root) -> std::unique_ptr<BoundTableRef> {
+  if (root->lateral) {
+    throw NotImplementedException("LATERAL in subquery is not supported");
+  }
 
   if (root->alias != nullptr) {
-    return std::make_unique<BoundSubqueryRef>(std::move(subquery), std::move(select_list_name),
-                                              std::string(root->alias->aliasname));
+    return BindSubquery(reinterpret_cast<duckdb_libpgquery::PGSelectStmt *>(root->subquery),
+                        std::string(root->alias->aliasname));
   }
-  return std::make_unique<BoundSubqueryRef>(std::move(subquery), std::move(select_list_name),
-                                            fmt::format("__subquery#{}", universal_id_++));
+  return BindSubquery(reinterpret_cast<duckdb_libpgquery::PGSelectStmt *>(root->subquery),
+                      fmt::format("__subquery#{}", universal_id_++));
+}
+
+auto Binder::BindCTE(duckdb_libpgquery::PGWithClause *node) -> std::vector<std::unique_ptr<BoundSubqueryRef>> {
+  std::vector<std::unique_ptr<BoundSubqueryRef>> ctes;
+  for (auto cte_ele = node->ctes->head; cte_ele != nullptr; cte_ele = cte_ele->next) {
+    auto cte = reinterpret_cast<duckdb_libpgquery::PGCommonTableExpr *>(cte_ele->data.ptr_value);
+
+    if (cte->ctequery == nullptr || cte->ctequery->type != duckdb_libpgquery::T_PGSelectStmt) {
+      throw bustub::Exception("SELECT not found");
+    }
+
+    if (cte->cterecursive || node->recursive) {
+      throw bustub::NotImplementedException("recursive CTE not supported");
+    }
+
+    auto subquery = BindSubquery(reinterpret_cast<duckdb_libpgquery::PGSelectStmt *>(cte->ctequery), cte->ctename);
+
+    ctes.emplace_back(std::move(subquery));
+  }
+
+  return ctes;
 }
 
 auto Binder::BindSelect(duckdb_libpgquery::PGSelectStmt *pg_stmt) -> std::unique_ptr<SelectStatement> {
@@ -111,7 +138,15 @@ auto Binder::BindSelect(duckdb_libpgquery::PGSelectStmt *pg_stmt) -> std::unique
         std::move(value_list), std::move(exprs), std::make_unique<BoundExpression>(),
         std::vector<std::unique_ptr<BoundExpression>>{}, std::make_unique<BoundExpression>(),
         std::make_unique<BoundExpression>(), std::make_unique<BoundExpression>(),
-        std::vector<std::unique_ptr<BoundOrderBy>>{}, false);
+        std::vector<std::unique_ptr<BoundOrderBy>>{}, std::vector<std::unique_ptr<BoundSubqueryRef>>{}, false);
+  }
+
+  // Bind CTEs
+  auto ctes = std::vector<std::unique_ptr<BoundSubqueryRef>>{};
+  if (pg_stmt->withClause != nullptr) {
+    ctes = BindCTE(pg_stmt->withClause);
+    cte_scope_ = &ctes;
+    // TODO(chi): allow access CTE from multiple levels of scopes
   }
 
   // Bind FROM clause.
@@ -178,11 +213,12 @@ auto Binder::BindSelect(duckdb_libpgquery::PGSelectStmt *pg_stmt) -> std::unique
 
   return std::make_unique<SelectStatement>(std::move(table), std::move(select_list), std::move(where),
                                            std::move(group_by), std::move(having), std::move(limit_count),
-                                           std::move(limit_offset), std::move(sort), is_distinct);
+                                           std::move(limit_offset), std::move(sort), std::move(ctes), is_distinct);
 }
 
 auto Binder::BindFrom(duckdb_libpgquery::PGList *list) -> std::unique_ptr<BoundTableRef> {
   auto ctx_guard = NewContext();
+
   if (list == nullptr) {
     return std::make_unique<BoundTableRef>(TableReferenceType::EMPTY);
   }
@@ -259,19 +295,41 @@ auto Binder::BindJoin(duckdb_libpgquery::PGJoinExpr *root) -> std::unique_ptr<Bo
   return join_ref;
 }
 
+auto Binder::BindBaseTableRef(std::string table_name, std::optional<std::string> alias)
+    -> std::unique_ptr<BoundBaseTableRef> {
+  auto table_info = catalog_.GetTable(table_name);
+  if (table_info == nullptr) {
+    throw bustub::Exception(fmt::format("invalid table {}", table_name));
+  }
+  return std::make_unique<BoundBaseTableRef>(std::move(table_name), table_info->oid_, std::move(alias),
+                                             table_info->schema_);
+}
+
+auto Binder::BindRangeVar(duckdb_libpgquery::PGRangeVar *table_ref) -> std::unique_ptr<BoundTableRef> {
+  if (cte_scope_ != nullptr) {
+    // Firstly, find the table in CTE list.
+    for (const auto &cte : *cte_scope_) {
+      if (cte->alias_ == table_ref->relname) {
+        std::string bound_name;
+        if (table_ref->alias != nullptr) {
+          bound_name = table_ref->alias->aliasname;
+        } else {
+          bound_name = table_ref->relname;
+        }
+        return std::make_unique<BoundCTERef>(cte->alias_, std::move(bound_name));
+      }
+    }
+  }
+  if (table_ref->alias != nullptr) {
+    return BindBaseTableRef(table_ref->relname, std::make_optional(table_ref->alias->aliasname));
+  }
+  return BindBaseTableRef(table_ref->relname, std::nullopt);
+}
+
 auto Binder::BindTableRef(duckdb_libpgquery::PGNode *node) -> std::unique_ptr<BoundTableRef> {
   switch (node->type) {
     case duckdb_libpgquery::T_PGRangeVar: {
-      auto *table_ref = reinterpret_cast<duckdb_libpgquery::PGRangeVar *>(node);
-      auto table_info = catalog_.GetTable(table_ref->relname);
-      if (table_info == nullptr) {
-        throw bustub::Exception(fmt::format("invalid table {}", table_ref->relname));
-      }
-      if (table_ref->alias != nullptr) {
-        return std::make_unique<BoundBaseTableRef>(table_ref->relname, std::make_optional(table_ref->alias->aliasname),
-                                                   table_info->schema_);
-      }
-      return std::make_unique<BoundBaseTableRef>(table_ref->relname, std::nullopt, table_info->schema_);
+      return BindRangeVar(reinterpret_cast<duckdb_libpgquery::PGRangeVar *>(node));
     }
     case duckdb_libpgquery::T_PGJoinExpr: {
       return BindJoin(reinterpret_cast<duckdb_libpgquery::PGJoinExpr *>(node));
@@ -319,6 +377,21 @@ auto Binder::GetAllColumns(const BoundTableRef &scope) -> std::vector<std::uniqu
         columns.emplace_back(BoundColumnRef::Prepend(std::make_unique<BoundColumnRef>(col_name), subquery_ref.alias_));
       }
       return columns;
+    }
+    case TableReferenceType::CTE: {
+      const auto &cte_ref = dynamic_cast<const BoundCTERef &>(scope);
+      for (const auto &cte : *cte_scope_) {
+        if (cte_ref.cte_name_ == cte->alias_) {
+          // TODO(chi): disallow multiple CTE of the same alias
+          auto columns = GetAllColumns(*cte);
+          for (auto &column : columns) {
+            auto &column_ref = dynamic_cast<BoundColumnRef &>(*column);
+            column_ref.col_name_[0] = cte_ref.alias_;
+          }
+          return columns;
+        }
+      }
+      UNREACHABLE("CTE not found");
     }
     default:
       throw bustub::Exception("select * cannot be used with this TableReferenceType");
@@ -377,11 +450,15 @@ auto Binder::BindConstant(duckdb_libpgquery::PGAConst *node) -> std::unique_ptr<
   const auto &val = node->val;
   switch (val.type) {
     case duckdb_libpgquery::T_PGInteger: {
-      BUSTUB_ASSERT(val.val.ival <= BUSTUB_INT32_MAX, "value out of range");
+      BUSTUB_ENSURE(val.val.ival <= BUSTUB_INT32_MAX, "value out of range");
       return std::make_unique<BoundConstant>(ValueFactory::GetIntegerValue(static_cast<int32_t>(val.val.ival)));
     }
     case duckdb_libpgquery::T_PGString: {
       return std::make_unique<BoundConstant>(ValueFactory::GetVarcharValue(val.val.str));
+    }
+    case duckdb_libpgquery::T_PGNull: {
+      // TODO(chi): cast integer null to other types
+      return std::make_unique<BoundConstant>(ValueFactory::GetNullValueByType(TypeId::INTEGER));
     }
     default:
       break;
@@ -526,18 +603,18 @@ static auto ResolveColumnRefFromSelectList(const std::vector<std::vector<std::st
                                            const std::vector<std::string> &col_name)
     -> std::unique_ptr<BoundColumnRef> {
   std::unique_ptr<BoundColumnRef> column_ref = nullptr;
-  for (const auto &column : subquery_select_list) {
-    if (MatchSuffix(col_name, column)) {
+  for (const auto &column_full_name : subquery_select_list) {
+    if (MatchSuffix(col_name, column_full_name)) {
       if (column_ref != nullptr) {
         throw Exception(fmt::format("{} is ambiguous in subquery select list", fmt::join(col_name, ".")));
       }
-      column_ref = std::make_unique<BoundColumnRef>(column);
+      column_ref = std::make_unique<BoundColumnRef>(column_full_name);
     }
   }
   return column_ref;
 }
 
-static auto ResolveColumnRefFromSubqueryRef(const BoundSubqueryRef &subquery_ref,
+static auto ResolveColumnRefFromSubqueryRef(const BoundSubqueryRef &subquery_ref, const std::string &alias,
                                             const std::vector<std::string> &col_name) {
   // Firstly, try directly resolve the column name through schema
   std::unique_ptr<BoundColumnRef> direct_resolved_expr = BoundColumnRef::Prepend(
@@ -547,7 +624,7 @@ static auto ResolveColumnRefFromSubqueryRef(const BoundSubqueryRef &subquery_ref
 
   // Then, try strip the prefix and match again
   if (col_name.size() > 1) {
-    if (col_name[0] == subquery_ref.alias_) {
+    if (col_name[0] == alias) {
       auto strip_column_name = col_name;
       strip_column_name.erase(strip_column_name.begin());
       strip_resolved_expr = BoundColumnRef::Prepend(
@@ -565,7 +642,7 @@ static auto ResolveColumnRefFromSubqueryRef(const BoundSubqueryRef &subquery_ref
   return direct_resolved_expr;
 }
 
-static auto ResolveColumnInternal(const BoundTableRef &table_ref, const std::vector<std::string> &col_name)
+auto Binder::ResolveColumnInternal(const BoundTableRef &table_ref, const std::vector<std::string> &col_name)
     -> std::unique_ptr<BoundExpression> {
   switch (table_ref.type_) {
     case TableReferenceType::BASE_TABLE: {
@@ -598,7 +675,17 @@ static auto ResolveColumnInternal(const BoundTableRef &table_ref, const std::vec
     }
     case TableReferenceType::SUBQUERY: {
       const auto &subquery_ref = dynamic_cast<const BoundSubqueryRef &>(table_ref);
-      return ResolveColumnRefFromSubqueryRef(subquery_ref, col_name);
+      return ResolveColumnRefFromSubqueryRef(subquery_ref, subquery_ref.alias_, col_name);
+    }
+    case TableReferenceType::CTE: {
+      const auto &cte_ref = dynamic_cast<const BoundCTERef &>(table_ref);
+      for (const auto &cte : *cte_scope_) {
+        if (cte_ref.cte_name_ == cte->alias_) {
+          // TODO(chi): disallow multiple CTE of the same alias
+          return ResolveColumnRefFromSubqueryRef(*cte, cte_ref.alias_, col_name);
+        }
+      }
+      UNREACHABLE("CTE not found");
     }
     default:
       throw bustub::Exception("unsupported TableReferenceType");
@@ -657,19 +744,26 @@ auto Binder::BindAExpr(duckdb_libpgquery::PGAExpr *root) -> std::unique_ptr<Boun
 auto Binder::BindBoolExpr(duckdb_libpgquery::PGBoolExpr *root) -> std::unique_ptr<BoundExpression> {
   BUSTUB_ASSERT(root, "nullptr");
   switch (root->boolop) {
-    case duckdb_libpgquery::PG_AND_EXPR: {
-      auto exprs = BindExpressionList(root->args);
-      if (exprs.size() != 2) {
-        throw bustub::Exception("AND should have 2 args");
-      }
-      return std::make_unique<BoundBinaryOp>("and", std::move(exprs[0]), std::move(exprs[1]));
-    }
+    case duckdb_libpgquery::PG_AND_EXPR:
     case duckdb_libpgquery::PG_OR_EXPR: {
-      auto exprs = BindExpressionList(root->args);
-      if (exprs.size() != 2) {
-        throw bustub::Exception("OR should have 2 args");
+      std::string op_name;
+      if (root->boolop == duckdb_libpgquery::PG_AND_EXPR) {
+        op_name = "and";
+      } else if (root->boolop == duckdb_libpgquery::PG_OR_EXPR) {
+        op_name = "or";
+      } else {
+        UNREACHABLE("invalid op");
       }
-      return std::make_unique<BoundBinaryOp>("or", std::move(exprs[0]), std::move(exprs[1]));
+
+      auto exprs = BindExpressionList(root->args);
+      if (exprs.size() <= 1) {
+        throw bustub::Exception("AND should have at least 1 arg");
+      }
+      auto expr = std::make_unique<BoundBinaryOp>("and", std::move(exprs[0]), std::move(exprs[1]));
+      for (size_t i = 2; i < exprs.size(); i++) {
+        expr = std::make_unique<BoundBinaryOp>("and", std::move(expr), std::move(exprs[i]));
+      }
+      return expr;
     }
     case duckdb_libpgquery::PG_NOT_EXPR: {
       auto exprs = BindExpressionList(root->args);
@@ -714,7 +808,27 @@ auto Binder::BindLimitOffset(duckdb_libpgquery::PGNode *root) -> std::unique_ptr
 }
 
 auto Binder::BindExplain(duckdb_libpgquery::PGExplainStmt *stmt) -> std::unique_ptr<ExplainStatement> {
-  return std::make_unique<ExplainStatement>(TransformStatement(stmt->query));
+  uint8_t explain_options =
+      ExplainOptions::PLANNER | ExplainOptions::OPTIMIZER | ExplainOptions::BINDER | ExplainOptions::SCHEMA;
+  if (stmt->options != nullptr) {
+    explain_options = ExplainOptions::INVALID;
+    for (auto node = stmt->options->head; node != nullptr; node = node->next) {
+      auto temp = reinterpret_cast<duckdb_libpgquery::PGDefElem *>(node->data.ptr_value);
+      if (strcmp(temp->defname, "planner") == 0 || strcmp(temp->defname, "p") == 0) {
+        explain_options |= ExplainOptions::PLANNER;
+      }
+      if (strcmp(temp->defname, "binder") == 0 || strcmp(temp->defname, "b") == 0) {
+        explain_options |= ExplainOptions::BINDER;
+      }
+      if (strcmp(temp->defname, "optimizer") == 0 || strcmp(temp->defname, "o") == 0) {
+        explain_options |= ExplainOptions::OPTIMIZER;
+      }
+      if (strcmp(temp->defname, "schema") == 0 || strcmp(temp->defname, "s") == 0) {
+        explain_options |= ExplainOptions::SCHEMA;
+      }
+    }
+  }
+  return std::make_unique<ExplainStatement>(BindStatement(stmt->query), explain_options);
 }
 
 //===----------------------------------------------------------------------===//

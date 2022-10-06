@@ -20,6 +20,7 @@
 // THE SOFTWARE.
 //===----------------------------------------------------------------------===//
 
+#include <memory>
 #include "binder/binder.h"
 #include "binder/bound_expression.h"
 #include "binder/bound_order_by.h"
@@ -27,6 +28,7 @@
 #include "binder/statement/create_statement.h"
 #include "binder/statement/delete_statement.h"
 #include "binder/statement/explain_statement.h"
+#include "binder/statement/index_statement.h"
 #include "binder/statement/insert_statement.h"
 #include "binder/statement/select_statement.h"
 #include "binder/table_ref/bound_base_table_ref.h"
@@ -39,26 +41,17 @@
 
 namespace bustub {
 
-auto Binder::TransformParseTree(duckdb_libpgquery::PGList *tree) -> std::vector<std::unique_ptr<BoundStatement>> {
+void Binder::SaveParseTree(duckdb_libpgquery::PGList *tree) {
   std::vector<std::unique_ptr<BoundStatement>> statements;
   for (auto entry = tree->head; entry != nullptr; entry = entry->next) {
-    auto stmt = TransformStatement(static_cast<duckdb_libpgquery::PGNode *>(entry->data.ptr_value));
-    statements.push_back(std::move(stmt));
+    statement_nodes_.push_back(reinterpret_cast<duckdb_libpgquery::PGNode *>(entry->data.ptr_value));
   }
-  return statements;
 }
 
-auto Binder::TransformStatement(duckdb_libpgquery::PGNode *stmt) -> std::unique_ptr<BoundStatement> {
+auto Binder::BindStatement(duckdb_libpgquery::PGNode *stmt) -> std::unique_ptr<BoundStatement> {
   switch (stmt->type) {
-    case duckdb_libpgquery::T_PGRawStmt: {
-      auto raw_stmt = reinterpret_cast<duckdb_libpgquery::PGRawStmt *>(stmt);
-      auto result = TransformStatement(raw_stmt->stmt);
-      if (result) {
-        result->stmt_location_ = raw_stmt->stmt_location;
-        result->stmt_length_ = raw_stmt->stmt_len;
-      }
-      return result;
-    }
+    case duckdb_libpgquery::T_PGRawStmt:
+      return BindStatement(reinterpret_cast<duckdb_libpgquery::PGRawStmt *>(stmt)->stmt);
     case duckdb_libpgquery::T_PGCreateStmt:
       return BindCreate(reinterpret_cast<duckdb_libpgquery::PGCreateStmt *>(stmt));
     case duckdb_libpgquery::T_PGInsertStmt:
@@ -68,8 +61,9 @@ auto Binder::TransformStatement(duckdb_libpgquery::PGNode *stmt) -> std::unique_
     case duckdb_libpgquery::T_PGExplainStmt:
       return BindExplain(reinterpret_cast<duckdb_libpgquery::PGExplainStmt *>(stmt));
     case duckdb_libpgquery::T_PGDeleteStmt:
-      return std::make_unique<DeleteStatement>(reinterpret_cast<duckdb_libpgquery::PGDeleteStmt *>(stmt));
+      return BindDelete(reinterpret_cast<duckdb_libpgquery::PGDeleteStmt *>(stmt));
     case duckdb_libpgquery::T_PGIndexStmt:
+      return BindIndex(reinterpret_cast<duckdb_libpgquery::PGIndexStmt *>(stmt));
     case duckdb_libpgquery::T_PGUpdateStmt:
     default:
       throw NotImplementedException(NodeTagToString(stmt->type));

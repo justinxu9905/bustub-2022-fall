@@ -8,12 +8,11 @@
 #include "binder/expressions/bound_column_ref.h"
 #include "binder/expressions/bound_constant.h"
 #include "binder/expressions/bound_unary_op.h"
+#include "binder/statement/select_statement.h"
 #include "common/exception.h"
 #include "common/macros.h"
 #include "common/util/string_util.h"
-#include "execution/expressions/abstract_expression.h"
 #include "execution/expressions/column_value_expression.h"
-#include "execution/expressions/comparison_expression.h"
 #include "execution/expressions/constant_value_expression.h"
 #include "execution/plans/abstract_plan.h"
 #include "fmt/format.h"
@@ -21,35 +20,12 @@
 
 namespace bustub {
 
-const char *unnamed_column = "<unnamed>";
-
 auto Planner::PlanBinaryOp(const BoundBinaryOp &expr, const std::vector<AbstractPlanNodeRef> &children)
     -> AbstractExpressionRef {
   auto [_1, left] = PlanExpression(*expr.larg_, children);
   auto [_2, right] = PlanExpression(*expr.rarg_, children);
   const auto &op_name = expr.op_name_;
-
-  if (op_name == "=" || op_name == "==") {
-    return std::make_shared<ComparisonExpression>(std::move(left), std::move(right), ComparisonType::Equal);
-  }
-  if (op_name == "!=" || op_name == "<>") {
-    return std::make_shared<ComparisonExpression>(std::move(left), std::move(right), ComparisonType::NotEqual);
-  }
-  if (op_name == "<") {
-    return std::make_shared<ComparisonExpression>(std::move(left), std::move(right), ComparisonType::LessThan);
-  }
-  if (op_name == "<=") {
-    return std::make_shared<ComparisonExpression>(std::move(left), std::move(right), ComparisonType::LessThanOrEqual);
-  }
-  if (op_name == ">") {
-    return std::make_shared<ComparisonExpression>(std::move(left), std::move(right), ComparisonType::GreaterThan);
-  }
-  if (op_name == ">=") {
-    return std::make_shared<ComparisonExpression>(std::move(left), std::move(right),
-                                                  ComparisonType::GreaterThanOrEqual);
-  }
-
-  throw Exception(fmt::format("binary op {} not supported in planner yet", op_name));
+  return GetBinaryExpressionFromFactory(op_name, std::move(left), std::move(right));
 }
 
 auto Planner::PlanColumnRef(const BoundColumnRef &expr, const std::vector<AbstractPlanNodeRef> &children)
@@ -164,7 +140,7 @@ auto Planner::PlanExpression(const BoundExpression &expr, const std::vector<Abst
       if (ctx_.next_aggregation_ >= ctx_.expr_in_agg_.size()) {
         throw bustub::Exception("unexpected agg call");
       }
-      return std::make_tuple(unnamed_column, std::move(ctx_.expr_in_agg_[ctx_.next_aggregation_++]));
+      return std::make_tuple(UNNAMED_COLUMN, std::move(ctx_.expr_in_agg_[ctx_.next_aggregation_++]));
     }
     case ExpressionType::COLUMN_REF: {
       const auto &column_ref_expr = dynamic_cast<const BoundColumnRef &>(expr);
@@ -172,11 +148,11 @@ auto Planner::PlanExpression(const BoundExpression &expr, const std::vector<Abst
     }
     case ExpressionType::BINARY_OP: {
       const auto &binary_op_expr = dynamic_cast<const BoundBinaryOp &>(expr);
-      return std::make_tuple(unnamed_column, PlanBinaryOp(binary_op_expr, children));
+      return std::make_tuple(UNNAMED_COLUMN, PlanBinaryOp(binary_op_expr, children));
     }
     case ExpressionType::CONSTANT: {
       const auto &constant_expr = dynamic_cast<const BoundConstant &>(expr);
-      return std::make_tuple(unnamed_column, PlanConstant(constant_expr, children));
+      return std::make_tuple(UNNAMED_COLUMN, PlanConstant(constant_expr, children));
     }
     case ExpressionType::ALIAS: {
       const auto &alias_expr = dynamic_cast<const BoundAlias &>(expr);
