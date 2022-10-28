@@ -21,7 +21,9 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, BufferPoolManager *buffer_pool_manag
  * Helper function to decide whether current b+tree is empty
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::IsEmpty() const -> bool { return true; }
+auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
+  return root_page_id_ == INVALID_PAGE_ID;
+}
 /*****************************************************************************
  * SEARCH
  *****************************************************************************/
@@ -47,7 +49,38 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *transaction) -> bool {
-  return false;
+  if (IsEmpty()) {
+    Page *page_ptr = buffer_pool_manager_->NewPage(&root_page_id_);
+
+    UpdateRootPageId(1);
+
+    B_PLUS_TREE_LEAF_PAGE_TYPE *leaf_page_ptr = reinterpret_cast<B_PLUS_TREE_LEAF_PAGE_TYPE*>(page_ptr->GetData());
+    leaf_page_ptr->Init(root_page_id_, INVALID_PAGE_ID, leaf_max_size_);
+    leaf_page_ptr->Insert(key, value, comparator_);
+
+    buffer_pool_manager_->UnpinPage(root_page_id_, true);
+  } else {
+    page_id_t page_id;
+    Page *page_ptr = buffer_pool_manager_->NewPage(&page_id);
+  }
+  return true;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::FindLeaf(const KeyType &key) -> Page* {
+  page_id_t page_id = root_page_id_;
+  while (true) {
+    Page *page_ptr = buffer_pool_manager_->FetchPage(page_id);
+    auto *tree_page_ptr = reinterpret_cast<BPlusTreePage*>(page_ptr->GetData());
+
+    if (tree_page_ptr->IsLeafPage()) {
+      return page_ptr;
+    }
+
+    auto *internal_page_ptr = reinterpret_cast<B_PLUS_TREE_INTERNAL_PAGE_TYPE*>(tree_page_ptr);
+    page_id = internal_page_ptr->Lookup(key, comparator_);
+    buffer_pool_manager_->UnpinPage(page_ptr->GetPageId(), false);
+  }
 }
 
 /*****************************************************************************
@@ -94,7 +127,9 @@ auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE(); 
  * @return Page id of the root of this tree
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::GetRootPageId() -> page_id_t { return 0; }
+auto BPLUSTREE_TYPE::GetRootPageId() -> page_id_t {
+  return root_page_id_;
+}
 
 /*****************************************************************************
  * UTILITIES AND DEBUG

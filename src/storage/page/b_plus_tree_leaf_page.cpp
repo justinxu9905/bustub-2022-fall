@@ -27,16 +27,26 @@ namespace bustub {
  * next page id and set max size
  */
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::Init(page_id_t page_id, page_id_t parent_id, int max_size) {}
+void B_PLUS_TREE_LEAF_PAGE_TYPE::Init(page_id_t page_id, page_id_t parent_id, int max_size) {
+  SetPageType(IndexPageType::LEAF_PAGE);
+  SetPageId(page_id);
+  SetParentPageId(parent_id);
+  SetSize(0);
+  SetMaxSize(max_size);
+}
 
 /**
  * Helper methods to set/get next page id
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetNextPageId() const -> page_id_t { return INVALID_PAGE_ID; }
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetNextPageId() const -> page_id_t {
+  return next_page_id_;
+}
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::SetNextPageId(page_id_t next_page_id) {}
+void B_PLUS_TREE_LEAF_PAGE_TYPE::SetNextPageId(page_id_t next_page_id) {
+  next_page_id_ = next_page_id;
+}
 
 /*
  * Helper method to find and return the key associated with input "index"(a.k.a
@@ -44,9 +54,64 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::SetNextPageId(page_id_t next_page_id) {}
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::KeyAt(int index) const -> KeyType {
-  // replace with your own code
-  KeyType key{};
-  return key;
+  return array_[index].first;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::KeyIndex(const KeyType &key, const KeyComparator &comparator) const -> int {
+  int size = GetSize();
+
+  int left = 0;
+  int right = size - 1;
+  while (left <= right) {
+    int mid = (left + right) / 2;
+    int ret = comparator(key, array_[mid].first);
+
+    if (ret == 1) {
+      left = mid + 1;
+    } else if (ret == -1) {
+      right = mid - 1;
+    } else {
+      return mid;
+    }
+  }
+
+  return left;
+}
+
+/*
+ * Insert a key-value pair in the leaf page
+ * return the size after insertion
+ */
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, const KeyComparator &comparator) -> int {
+  int size = GetSize();
+
+  if (size == 0) {
+    InsertAt(0, key, value);
+    return 1;
+  }
+
+  int index = KeyIndex(key, comparator);
+  if (comparator(key, KeyAt(index)) == 0) {
+    return size;
+  }
+
+  InsertAt(index, key, value);
+  return GetSize();
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_LEAF_PAGE_TYPE::InsertAt(int index, const KeyType &key, const ValueType &value) {
+  int size = GetSize();
+
+  for (int i = size - 1; i >= index; i--) {
+    array_[i + 1] = array_[i];
+  }
+  array_[index] = MappingType{key, value};
+
+  IncreaseSize(1);
 }
 
 template class BPlusTreeLeafPage<GenericKey<4>, RID, GenericComparator<4>>;
