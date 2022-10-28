@@ -57,25 +57,28 @@
     }
 </style>
 
-<script src="./bustub-wasm-shell.js"></script>
+<script src="bustub-wasm-shell.js"></script>
 
 <script type="text/javascript">
     const BUSTUB_PUBLIC_VERSION_VAR = "${BUSTUB_PUBLIC_VERSION}"
     const BUSTUB_PRIVATE_VERSION_VAR = "${BUSTUB_PRIVATE_VERSION}"
+    const BUSTUB_BUILD_TIME_VAR = "${BUSTUB_BUILD_TIME}"
 
     Module['onRuntimeInitialized'] = function () {
         const executeQuery = Module.cwrap('BustubExecuteQuery', 'number', ['string', 'number', 'number'])
-        const test = Module.cwrap('Test', 'number', [])
+        const initialize = Module.cwrap('BustubInit', 'number', [])
         window.executeQuery = (x) => {
             const bufferSize = 64 * 1024
             let output = "\0".repeat(bufferSize)
             let ptrOutput = Module.allocateUTF8(output)
-            console.log(executeQuery(x, ptrOutput, bufferSize))
+            const retCode = executeQuery(x, ptrOutput, bufferSize)
             output = Module.UTF8ToString(ptrOutput)
             Module._free(ptrOutput)
-            return output
+            return [retCode, output]
         }
+        initialize()
     }
+
     $(document).ready(() => {
         $.terminal.syntax('sql')
         $.terminal.prism_formatters = {
@@ -91,8 +94,12 @@
                 if (line == "\\clear") {
                     this.clear()
                 } else {
-                    const result = executeQuery(line)
+                    const [retCode, result] = executeQuery(line)
                     this.echo(result, { raw: true })
+                    if (retCode == 1) {
+                        this.echo("Table truncated due to output limit.")
+                    }
+                    this.echo()
                 }
                 line = ""
             }
@@ -104,11 +111,21 @@ BusTub is a relational database management system built at Carnegie Mellon Unive
 
 Use \\help to learn about the usage. Use \\clear to clear the page.
 
-This is BusTub reference solution running in your browser. Solution Version: ${BUSTUB_PRIVATE_VERSION_VAR}, BusTub Version: ${BUSTUB_PUBLIC_VERSION_VAR}.
+This is BusTub reference solution running in your browser. Solution Version: ${BUSTUB_PRIVATE_VERSION_VAR}, BusTub Version: ${BUSTUB_PUBLIC_VERSION_VAR}, built at ${BUSTUB_BUILD_TIME_VAR}.
 `,
             prompt: () => line.length == 0 ? "[[b;;]bustub> ]" : "[[b;;]... ]"
         })
     })
+</script>
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-52525161-8"></script>
+<script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+
+    gtag('config', 'UA-52525161-8');
 </script>
 
 </html>

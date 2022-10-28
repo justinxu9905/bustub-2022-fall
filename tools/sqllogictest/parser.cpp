@@ -36,17 +36,15 @@ auto Tokenize(const std::string &str, char delimiter = ' ') -> std::vector<std::
 auto ParseInner(const std::string &filename, const std::string &script) -> std::vector<std::unique_ptr<Record>> {
   auto lines = StringUtil::Split(script, '\n');
   std::vector<std::unique_ptr<Record>> records;
-  size_t line_cnt = 0;
   auto line_iter = lines.cbegin();
   while (line_iter != lines.cend()) {
     const auto &line = *line_iter;
-    line_cnt += 1;
 
     if (line.empty() || StringUtil::StartsWith(line, "#")) {
       line_iter++;
       continue;
     }
-    auto loc = Location{filename, line_cnt, nullptr};
+    auto loc = Location{filename, static_cast<size_t>(line_iter - lines.cbegin()) + 1, nullptr};
     auto tokens = Tokenize(line);
     if (tokens.empty()) {
       line_iter++;
@@ -75,16 +73,21 @@ auto ParseInner(const std::string &filename, const std::string &script) -> std::
     }
     if (tokens[0] == "statement") {
       bool error;
-      if (tokens.size() == 2 && tokens[1] == "ok") {
+      if (tokens[1] == "ok") {
         error = false;
-      } else if (tokens.size() == 2 && tokens[1] == "error") {
+      } else if (tokens[1] == "error") {
         error = true;
-      } else {
-        throw bustub::Exception("unexpected args");
       }
-      line_iter++;
-      if (line_iter == lines.cend()) {
-        throw bustub::Exception("unexpected end");
+      std::vector<std::string> extra_options;
+      for (auto iter = tokens.cbegin() + 2; iter != tokens.cend(); iter++) {
+        if (iter->length() > 0) {
+          if ((*iter)[0] == '+') {
+            extra_options.emplace_back(std::string(iter->cbegin() + 1, iter->cend()));
+          }
+        }
+      }
+      if (line_iter != lines.cend()) {
+        line_iter++;
       }
       std::string sql;
       while (line_iter != lines.cend()) {
@@ -97,24 +100,26 @@ auto ParseInner(const std::string &filename, const std::string &script) -> std::
         line_iter++;
       }
       StringUtil::RTrim(&sql);
-      records.emplace_back(std::make_unique<StatementRecord>(loc, error, std::move(sql)));
+      records.emplace_back(std::make_unique<StatementRecord>(loc, error, std::move(sql), std::move(extra_options)));
       if (line_iter == lines.cend()) {
         break;
       }
     }
 
     if (tokens[0] == "query") {
-      auto sort_mode = SortMode::INVALID;
-      if (tokens.size() == 2) {
+      auto sort_mode = SortMode::NOSORT;
+      if (tokens.size() >= 2) {
         if (tokens[1] == "rowsort") {
           sort_mode = SortMode::ROWSORT;
-        } else {
-          throw bustub::Exception("unexpected args");
         }
-      } else if (tokens.size() == 1) {
-        sort_mode = SortMode::NOSORT;
-      } else {
-        throw bustub::Exception("unexpected args");
+      }
+      std::vector<std::string> extra_options;
+      for (auto iter = tokens.cbegin() + 1; iter != tokens.cend(); iter++) {
+        if (iter->length() > 0) {
+          if ((*iter)[0] == '+') {
+            extra_options.emplace_back(std::string(iter->cbegin() + 1, iter->cend()));
+          }
+        }
       }
       line_iter++;
       if (line_iter == lines.cend()) {
@@ -135,12 +140,11 @@ auto ParseInner(const std::string &filename, const std::string &script) -> std::
         sql += "\n";
         line_iter++;
       }
-      if (line_iter == lines.cend() || !has_result) {
-        throw bustub::Exception("unexpected end");
+      if (!has_result) {
+        throw bustub::Exception("no result");
       }
-      line_iter++;
-      if (line_iter == lines.cend()) {
-        throw bustub::Exception("unexpected end");
+      if (line_iter != lines.cend()) {
+        line_iter++;
       }
       std::string expected_result;
       while (line_iter != lines.cend()) {
@@ -154,11 +158,12 @@ auto ParseInner(const std::string &filename, const std::string &script) -> std::
         expected_result += "\n";
         line_iter++;
       }
-      if (line_iter == lines.cend()) {
-        throw bustub::Exception("unexpected end");
-      }
       StringUtil::RTrim(&sql);
-      records.emplace_back(std::make_unique<QueryRecord>(loc, sort_mode, std::move(sql), std::move(expected_result)));
+      records.emplace_back(std::make_unique<QueryRecord>(loc, sort_mode, std::move(sql), std::move(expected_result),
+                                                         std::move(extra_options)));
+      if (line_iter == lines.cend()) {
+        break;
+      }
     }
     line_iter++;
   }

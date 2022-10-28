@@ -14,13 +14,16 @@
 
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "catalog/catalog.h"
 #include "common/config.h"
+#include "common/util/string_util.h"
 #include "libfort/lib/fort.hpp"
 #include "type/value.h"
 
@@ -54,16 +57,29 @@ class ResultWriter {
   bool simplified_output_{false};
 };
 
+class NoopWriter : public ResultWriter {
+ public:
+  NoopWriter() = default;
+  void WriteCell(const std::string &cell) override {}
+  void WriteHeaderCell(const std::string &cell) override {}
+  void BeginHeader() override {}
+  void EndHeader() override {}
+  void BeginRow() override {}
+  void EndRow() override {}
+  void BeginTable(bool simplified_output) override {}
+  void EndTable() override {}
+};
+
 class SimpleStreamWriter : public ResultWriter {
  public:
-  explicit SimpleStreamWriter(std::ostream &stream, bool disable_header = false)
-      : disable_header_(disable_header), stream_(stream) {}
+  explicit SimpleStreamWriter(std::ostream &stream, bool disable_header = false, const char *separator = "\t")
+      : disable_header_(disable_header), stream_(stream), separator_(separator) {}
   static auto BoldOn(std::ostream &os) -> std::ostream & { return os << "\e[1m"; }
   static auto BoldOff(std::ostream &os) -> std::ostream & { return os << "\e[0m"; }
-  void WriteCell(const std::string &cell) override { stream_ << cell << "\t"; }
+  void WriteCell(const std::string &cell) override { stream_ << cell << separator_; }
   void WriteHeaderCell(const std::string &cell) override {
     if (!disable_header_) {
-      stream_ << BoldOn << cell << BoldOff << "\t";
+      stream_ << BoldOn << cell << BoldOff << separator_;
     }
   }
   void BeginHeader() override {}
@@ -79,6 +95,7 @@ class SimpleStreamWriter : public ResultWriter {
 
   bool disable_header_;
   std::ostream &stream_;
+  std::string separator_;
 };
 
 class HtmlWriter : public ResultWriter {
@@ -228,11 +245,24 @@ class BustubInstance {
   Catalog *catalog_;
   ExecutionEngine *execution_engine_;
 
+  auto GetSessionVariable(const std::string &key) -> std::string {
+    if (session_variables_.find(key) != session_variables_.end()) {
+      return session_variables_[key];
+    }
+    return "";
+  }
+
+  auto IsForceStarterRule() -> bool {
+    auto variable = StringUtil::Lower(GetSessionVariable("force_optimizer_starter_rule"));
+    return variable == "1" || variable == "true" || variable == "yes";
+  }
+
  private:
   void CmdDisplayTables(ResultWriter &writer);
   void CmdDisplayIndices(ResultWriter &writer);
   void CmdDisplayHelp(ResultWriter &writer);
   void WriteOneCell(const std::string &cell, ResultWriter &writer);
+  std::unordered_map<std::string, std::string> session_variables_;
 };
 
 }  // namespace bustub

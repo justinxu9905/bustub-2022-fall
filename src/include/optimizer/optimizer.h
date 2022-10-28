@@ -19,9 +19,12 @@ namespace bustub {
  */
 class Optimizer {
  public:
-  explicit Optimizer(const Catalog &catalog) : catalog_(catalog) {}
+  explicit Optimizer(const Catalog &catalog, bool force_starter_rule)
+      : catalog_(catalog), force_starter_rule_(force_starter_rule) {}
 
   auto Optimize(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
+  auto OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
  private:
   /**
@@ -74,10 +77,26 @@ class Optimizer {
   auto MatchIndex(const std::string &table_name, uint32_t index_key_idx)
       -> std::optional<std::tuple<index_oid_t, std::string>>;
 
+  /**
+   * @brief optimize sort + limit as top N
+   */
+  auto OptimizeSortLimitAsTopN(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
+  /**
+   * @brief get the estimated cardinality for a table based on the table name. Useful when join reordering. BusTub
+   * doesn't support statistics for now, so it's the only way for you to get the table size :(
+   *
+   * @param table_name
+   * @return std::optional<size_t>
+   */
+  auto EstimatedCardinality(const std::string &table_name) -> std::optional<size_t>;
+
   /** Catalog will be used during the planning process. USERS SHOULD ENSURE IT OUTLIVES
    * OPTIMIZER, otherwise it's a dangling reference.
    */
   const Catalog &catalog_;
+
+  const bool force_starter_rule_;
 };
 
 }  // namespace bustub
