@@ -48,7 +48,13 @@ class BPlusTree {
   // Insert a key-value pair into this B+ tree.
   auto Insert(const KeyType &key, const ValueType &value, Transaction *transaction = nullptr) -> bool;
 
-  auto FindLeaf(const KeyType &key) -> Page*;
+  auto FindLeaf(const KeyType &key) -> Page *;
+
+  template <class N>
+  auto Split(N *old_node, Transaction *transaction = nullptr) -> Page *;
+
+  auto InsertIntoParent(BPlusTreePage *old_node, const KeyType &key, BPlusTreePage *new_node,
+                        Transaction *transaction = nullptr) -> bool;
 
   // Remove a key and its value from this B+ tree.
   void Remove(const KeyType &key, Transaction *transaction = nullptr);
