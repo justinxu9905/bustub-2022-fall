@@ -132,8 +132,20 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::RemoveAt(int index) {
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveLastItemToFront(B_PLUS_TREE_LEAF_PAGE_TYPE *leaf_node) {
-  // std::cout << "[Leaf MoveLastItemToFront] from " << GetPageId() << " to " << leaf_node->GetPageId() << std::endl;
+void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveFirstItemToBackOf(B_PLUS_TREE_LEAF_PAGE_TYPE *leaf_node) {
+  // std::cout << "[Leaf MoveFirstItemToBackOf] from " << GetPageId() << " to " << leaf_node->GetPageId() << std::endl;
+  int size = GetSize();
+  if (size == 0) {
+    return;
+  }
+
+  leaf_node->InsertAt(leaf_node->GetSize(), KeyAt(0), ValueAt(0));
+  RemoveAt(0);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveLastItemToFrontOf(B_PLUS_TREE_LEAF_PAGE_TYPE *leaf_node) {
+  // std::cout << "[Leaf MoveLastItemToFrontOf] from " << GetPageId() << " to " << leaf_node->GetPageId() << std::endl;
   int size = GetSize();
   if (size == 0) {
     return;

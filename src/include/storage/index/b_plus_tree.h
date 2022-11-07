@@ -48,14 +48,6 @@ class BPlusTree {
   // Insert a key-value pair into this B+ tree.
   auto Insert(const KeyType &key, const ValueType &value, Transaction *transaction = nullptr) -> bool;
 
-  auto FindLeaf(const KeyType &key) -> Page *;
-
-  template <class N>
-  auto Split(N *old_node, Transaction *transaction = nullptr) -> Page *;
-
-  auto InsertIntoParent(BPlusTreePage *old_node, const KeyType &key, BPlusTreePage *new_node,
-                        Transaction *transaction = nullptr) -> bool;
-
   // Remove a key and its value from this B+ tree.
   void Remove(const KeyType &key, Transaction *transaction = nullptr);
 
@@ -83,6 +75,26 @@ class BPlusTree {
   void RemoveFromFile(const std::string &file_name, Transaction *transaction = nullptr);
 
  private:
+  // Find the appropriate leaf page
+  auto FindLeaf(const KeyType &key) -> Page *;
+
+  // Split a new into two
+  template <class N>
+  auto Split(N *old_node, Transaction *transaction = nullptr) -> Page *;
+
+  // Insert a new node to the old node's parent
+  auto InsertIntoParent(BPlusTreePage *old_node, const KeyType &key, BPlusTreePage *new_node,
+                        Transaction *transaction = nullptr) -> bool;
+
+  template <class N>
+  void RedistributeOrCoalesce(N *node, Transaction *transaction = nullptr);
+
+  template <typename N>
+  void Redistribute(N *neighbor_node, N *node, bool from_prev);
+
+  template <typename N>
+  void Coalesce(N *neighbor_node, N *node, bool into_prev);
+
   void UpdateRootPageId(int insert_record = 0);
 
   /* Debug Routines for FREE!! */

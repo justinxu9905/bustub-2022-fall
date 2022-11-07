@@ -42,13 +42,15 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   void SetKeyAt(int index, const KeyType &key);
   auto ValueAt(int index) const -> ValueType;
   void SetValueAt(int index, const ValueType &value);
+  auto ValueIndex(const ValueType &value) const -> int;
 
   auto Insert(const KeyType &key, const ValueType &value, const KeyComparator &comparator) -> int;
   void InsertAt(int index, const KeyType &key, const ValueType &value);
   void RemoveAt(int index);
   auto LookupIndex(const KeyType &key, const KeyComparator &comparator) const -> int;
   auto Lookup(const KeyType &key, const KeyComparator &comparator) const -> ValueType;
-  void MoveLastItemToFront(B_PLUS_TREE_INTERNAL_PAGE_TYPE *internal_node, BufferPoolManager *buffer_pool_manager);
+  void MoveFirstItemToBackOf(B_PLUS_TREE_INTERNAL_PAGE_TYPE *internal_node, BufferPoolManager *buffer_pool_manager);
+  void MoveLastItemToFrontOf(B_PLUS_TREE_INTERNAL_PAGE_TYPE *internal_node, BufferPoolManager *buffer_pool_manager);
 
   void BuildRoot(const KeyType &old_key, const ValueType &old_value, const KeyType &new_key,
                  const ValueType &new_value);

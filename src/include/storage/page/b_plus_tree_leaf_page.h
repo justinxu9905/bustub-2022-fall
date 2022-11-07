@@ -57,7 +57,8 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto Insert(const KeyType &key, const ValueType &value, const KeyComparator &comparator) -> int;
   void InsertAt(int index, const KeyType &key, const ValueType &value);
   void RemoveAt(int index);
-  void MoveLastItemToFront(B_PLUS_TREE_LEAF_PAGE_TYPE *leaf_node);
+  void MoveFirstItemToBackOf(B_PLUS_TREE_LEAF_PAGE_TYPE *leaf_node);
+  void MoveLastItemToFrontOf(B_PLUS_TREE_LEAF_PAGE_TYPE *leaf_node);
 
  private:
   page_id_t next_page_id_;

@@ -53,6 +53,19 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetValueAt(int index, const ValueType &value) { array_[index].second = value; }
 
 INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueIndex(const ValueType &value) const -> int {
+  int size = GetSize();
+
+  for (int index = 0; index < size; ++index) {  // size: number of children/kv pair
+    if (ValueAt(index) == value) {
+      return index;
+    }
+  }
+
+  return INVALID_PAGE_ID;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, const KeyComparator &comparator)
     -> int {
   int size = GetSize();
@@ -122,9 +135,30 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Lookup(const KeyType &key, const KeyCompara
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveLastItemToFront(B_PLUS_TREE_INTERNAL_PAGE_TYPE *internal_node,
-                                                         BufferPoolManager *buffer_pool_manager) {
-  // std::cout << "[Internal MoveLastItemToFront] from " << GetPageId() << " to " << internal_node->GetPageId() <<
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveFirstItemToBackOf(B_PLUS_TREE_INTERNAL_PAGE_TYPE *internal_node,
+                                                           BufferPoolManager *buffer_pool_manager) {
+  // std::cout << "[Internal MoveFirstItemToBackOf] from " << GetPageId() << " to " << internal_node->GetPageId() <<
+  // std::endl;
+  int size = GetSize();
+  if (size == 0) {
+    return;
+  }
+
+  page_id_t moved_page_id = ValueAt(0);
+  Page *moved_page_ptr = buffer_pool_manager->FetchPage(moved_page_id);
+  auto *moved_node = reinterpret_cast<BPlusTreePage *>(moved_page_ptr->GetData());
+  moved_node->SetParentPageId(internal_node->GetPageId());
+
+  internal_node->InsertAt(internal_node->GetSize(), KeyAt(0), ValueAt(0));
+  RemoveAt(0);
+
+  buffer_pool_manager->UnpinPage(moved_page_id, true);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveLastItemToFrontOf(B_PLUS_TREE_INTERNAL_PAGE_TYPE *internal_node,
+                                                           BufferPoolManager *buffer_pool_manager) {
+  // std::cout << "[Internal MoveLastItemToFrontOf] from " << GetPageId() << " to " << internal_node->GetPageId() <<
   // std::endl;
   int size = GetSize();
   if (size == 0) {
@@ -138,6 +172,8 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveLastItemToFront(B_PLUS_TREE_INTERNAL_PA
 
   internal_node->InsertAt(0, KeyAt(size - 1), ValueAt(size - 1));
   RemoveAt(size - 1);
+
+  buffer_pool_manager->UnpinPage(moved_page_id, true);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
