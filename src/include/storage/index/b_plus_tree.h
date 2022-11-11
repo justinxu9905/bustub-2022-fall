@@ -83,8 +83,8 @@ class BPlusTree {
   auto Split(N *old_node, Transaction *transaction = nullptr) -> Page *;
 
   // Insert a new node to the old node's parent
-  auto InsertIntoParent(BPlusTreePage *old_node, const KeyType &key, BPlusTreePage *new_node,
-                        Transaction *transaction = nullptr) -> bool;
+  auto InsertIntoParent(const KeyType &old_key, BPlusTreePage *old_node, const KeyType &new_key,
+                        BPlusTreePage *new_node, Transaction *transaction = nullptr) -> bool;
 
   template <class N>
   void RedistributeOrCoalesce(N *node, Transaction *transaction = nullptr);

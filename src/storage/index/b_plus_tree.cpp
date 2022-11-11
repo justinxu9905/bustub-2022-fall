@@ -115,7 +115,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
 
         buffer_pool_manager_->UnpinPage(root_page_id_, true);
       } else {
-        InsertIntoParent(leaf_node, split_node->KeyAt(0), split_node, transaction);
+        InsertIntoParent(leaf_node->KeyAt(0), leaf_node, split_node->KeyAt(0), split_node, transaction);
       }
 
       buffer_pool_manager_->UnpinPage(split_page_ptr->GetPageId(), true);
@@ -167,8 +167,8 @@ auto BPLUSTREE_TYPE::Split(N *old_node, Transaction *transaction) -> Page * {
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::InsertIntoParent(BPlusTreePage *old_node, const KeyType &key, BPlusTreePage *new_node,
-                                      Transaction *transaction) -> bool {
+auto BPLUSTREE_TYPE::InsertIntoParent(const KeyType &old_key, BPlusTreePage *old_node, const KeyType &new_key,
+                                      BPlusTreePage *new_node, Transaction *transaction) -> bool {
   // std::cout << "[InsertIntoParent] key: " << key << " new_node: " << new_node->GetPageId() << " parent: " <<
   // old_node->GetParentPageId() << std::endl;
   page_id_t parent_page_id = old_node->GetParentPageId();
@@ -177,7 +177,11 @@ auto BPLUSTREE_TYPE::InsertIntoParent(BPlusTreePage *old_node, const KeyType &ke
     return false;
   }
   auto *parent_node = reinterpret_cast<InternalPage *>(buffer_pool_manager_->FetchPage(parent_page_id));
-  parent_node->Insert(key, new_node->GetPageId(), comparator_);
+
+  // update old_node's key: it is possible that the first item of old_node has changed
+  parent_node->SetKeyAt(parent_node->ValueIndex(old_node->GetPageId()), old_key);
+
+  parent_node->Insert(new_key, new_node->GetPageId(), comparator_);
   new_node->SetParentPageId(parent_page_id);
 
   // Handle splitting
@@ -206,16 +210,11 @@ auto BPLUSTREE_TYPE::InsertIntoParent(BPlusTreePage *old_node, const KeyType &ke
 
       buffer_pool_manager_->UnpinPage(root_page_id_, true);
     } else {
-      InsertIntoParent(parent_node, split_node->KeyAt(0), split_node, transaction);
+      InsertIntoParent(parent_node->KeyAt(0), parent_node, split_node->KeyAt(0), split_node, transaction);
     }
 
     buffer_pool_manager_->UnpinPage(split_page_ptr->GetPageId(), true);
   }
-
-  /*parent_page_id = old_node->GetParentPageId();
-  parent_node = reinterpret_cast<InternalPage *>(buffer_pool_manager_->FetchPage(parent_page_id));
-  parent_node->Insert(key, new_node->GetPageId(), comparator_);
-  new_node->SetParentPageId(parent_page_id);*/
 
   buffer_pool_manager_->UnpinPage(parent_page_id, true);
   return false;
@@ -246,7 +245,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
   leaf_node->RemoveAt(index);
 
   // update key in parent if needed
-  if (index == 0 && leaf_node->GetSize()) {
+  if (index == 0 && leaf_node->GetSize() && !leaf_node->IsRootPage()) {
     page_id_t parent_page_id = leaf_node->GetParentPageId();
     auto *parent_node = reinterpret_cast<InternalPage *>(buffer_pool_manager_->FetchPage(parent_page_id));
 
@@ -453,12 +452,27 @@ void BPLUSTREE_TYPE::Coalesce(N *neighbor_node, N *node, bool into_prev) {
  * INDEX ITERATOR
  *****************************************************************************/
 /*
- * Input parameter is void, find the leaftmost leaf page first, then construct
+ * Input parameter is void, find the leftmost leaf page first, then construct
  * index iterator
  * @return : index iterator
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE(); }
+auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
+  std::cout << "[Begin]" << std::endl;
+  page_id_t page_id = root_page_id_;
+  while (true) {
+    Page *page_ptr = buffer_pool_manager_->FetchPage(page_id);
+    auto *tree_page_ptr = reinterpret_cast<BPlusTreePage *>(page_ptr->GetData());
+
+    if (tree_page_ptr->IsLeafPage()) {
+      return INDEXITERATOR_TYPE(reinterpret_cast<LeafPage *>(tree_page_ptr), 0, buffer_pool_manager_);
+    }
+
+    auto *internal_node = reinterpret_cast<InternalPage *>(tree_page_ptr);
+    page_id = internal_node->ValueAt(0);
+    buffer_pool_manager_->UnpinPage(page_ptr->GetPageId(), false);
+  }
+}
 
 /*
  * Input parameter is low key, find the leaf page that contains the input key
@@ -466,7 +480,12 @@ auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE()
  * @return : index iterator
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE(); }
+auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
+  std::cout << "[Begin] key: " << key << std::endl;
+  auto *leaf_node = reinterpret_cast<LeafPage *>(FindLeaf(key)->GetData());
+  int index = leaf_node->KeyIndex(key, comparator_);
+  return INDEXITERATOR_TYPE(leaf_node, index, buffer_pool_manager_);
+}
 
 /*
  * Input parameter is void, construct an index iterator representing the end
@@ -474,7 +493,7 @@ auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE { return IN
  * @return : index iterator
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE(); }
+auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE(nullptr, 0, buffer_pool_manager_); }
 
 /**
  * @return Page id of the root of this tree
