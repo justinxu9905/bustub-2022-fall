@@ -265,6 +265,7 @@ auto BPLUSTREE_TYPE::FindLeaf(const KeyType &key, int latch_mode, Transaction *t
         // std::cout << "page " << page_ptr->GetPageId() << " RLatch" << std::endl;
         if (prev_page_ptr != nullptr) {
           prev_page_ptr->RUnlatch();
+          buffer_pool_manager_->UnpinPage(prev_page_ptr->GetPageId(), false);
           // std::cout << "page " << page_ptr->GetPageId() << " RUnlatch" << std::endl;
         } else {
           root_latch_.RUnlock();
