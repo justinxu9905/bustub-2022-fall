@@ -22,6 +22,9 @@
 namespace bustub {
 
 #define BPLUSTREE_TYPE BPlusTree<KeyType, ValueType, KeyComparator>
+#define READ_MODE 0
+#define INSERT_MODE 1
+#define REMOVE_MODE 2
 
 /**
  * Main class providing the API for the Interactive B+ Tree.
@@ -76,24 +79,30 @@ class BPlusTree {
 
  private:
   // Find the appropriate leaf page
-  auto FindLeaf(const KeyType &key) -> Page *;
+  auto FindLeaf(const KeyType &key, int latch_mode, Transaction *transaction = nullptr) -> Page *;
+
+  // Release queued latches
+  void ReleaseQueuedLatches(Transaction *transaction, int latch_mode);
 
   // Split a new into two
   template <class N>
-  auto Split(N *old_node, Transaction *transaction = nullptr) -> Page *;
+  auto Split(N *old_node, Transaction *transaction) -> Page *;
 
   // Insert a new node to the old node's parent
   auto InsertIntoParent(const KeyType &old_key, BPlusTreePage *old_node, const KeyType &new_key,
-                        BPlusTreePage *new_node, Transaction *transaction = nullptr) -> bool;
+                        BPlusTreePage *new_node, Transaction *transaction) -> bool;
 
+  // Handle redistributing or coalescing after removing
   template <class N>
-  void RedistributeOrCoalesce(N *node, Transaction *transaction = nullptr);
+  void RedistributeOrCoalesce(N *node, Transaction *transaction);
 
   template <typename N>
   void Redistribute(N *neighbor_node, N *node, bool from_prev);
 
   template <typename N>
   void Coalesce(N *neighbor_node, N *node, bool into_prev);
+
+  void CleanupDeletedPages(Transaction *transaction);
 
   void UpdateRootPageId(int insert_record = 0);
 
@@ -105,6 +114,7 @@ class BPlusTree {
   // member variable
   std::string index_name_;
   page_id_t root_page_id_;
+  ReaderWriterLatch root_latch_{};
   BufferPoolManager *buffer_pool_manager_;
   KeyComparator comparator_;
   int leaf_max_size_;
