@@ -15,8 +15,7 @@ INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::IndexIterator() = default;
 
 INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE::IndexIterator(B_PLUS_TREE_LEAF_PAGE_TYPE *page_ptr, int index,
-                                  BufferPoolManager *buffer_pool_manager)
+INDEXITERATOR_TYPE::IndexIterator(Page *page_ptr, int index, BufferPoolManager *buffer_pool_manager)
     : buffer_pool_manager_(buffer_pool_manager), page_ptr_(page_ptr), in_page_index_(index) {
   if (page_ptr_ == nullptr) {
     page_id_ = INVALID_PAGE_ID;
@@ -28,6 +27,8 @@ INDEXITERATOR_TYPE::IndexIterator(B_PLUS_TREE_LEAF_PAGE_TYPE *page_ptr, int inde
 INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::~IndexIterator() {
   if (!IsEnd()) {
+    std::cout << "page " << page_ptr_->GetPageId() << " RUnlatch" << std::endl;
+    page_ptr_->RUnlatch();
     buffer_pool_manager_->UnpinPage(page_id_, false);
   }
 }
@@ -38,7 +39,7 @@ auto INDEXITERATOR_TYPE::IsEnd() -> bool { return page_id_ == INVALID_PAGE_ID; }
 INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::operator*() -> const MappingType & {
   assert(page_ptr_ != nullptr);
-  return page_ptr_->ItemAt(in_page_index_);
+  return reinterpret_cast<B_PLUS_TREE_LEAF_PAGE_TYPE *>(page_ptr_->GetData())->ItemAt(in_page_index_);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -47,16 +48,24 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
     return *this;
   }
 
-  if (in_page_index_ == page_ptr_->GetSize() - 1) {
+  auto *leaf_node = reinterpret_cast<B_PLUS_TREE_LEAF_PAGE_TYPE *>(page_ptr_->GetData());
+
+  if (in_page_index_ == leaf_node->GetSize() - 1) {
     page_id_t old_page_id = page_id_;
-    page_id_ = page_ptr_->GetNextPageId();
+    Page *old_page_ptr = page_ptr_;
+
+    page_id_ = leaf_node->GetNextPageId();
     in_page_index_ = 0;
-    buffer_pool_manager_->UnpinPage(old_page_id, false);
-    if (IsEnd()) {
+    if (page_id_ == INVALID_PAGE_ID) {
       page_ptr_ = nullptr;
     } else {
-      page_ptr_ = reinterpret_cast<B_PLUS_TREE_LEAF_PAGE_TYPE *>(buffer_pool_manager_->FetchPage(page_id_)->GetData());
+      page_ptr_ = buffer_pool_manager_->FetchPage(page_id_);
+      page_ptr_->RLatch();
     }
+
+    std::cout << "page " << old_page_ptr->GetPageId() << " RUnlatch" << std::endl;
+    old_page_ptr->RUnlatch();
+    buffer_pool_manager_->UnpinPage(old_page_id, false);
   } else {
     in_page_index_++;
   }
