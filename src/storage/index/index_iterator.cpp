@@ -60,7 +60,17 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
       page_ptr_ = nullptr;
     } else {
       page_ptr_ = buffer_pool_manager_->FetchPage(page_id_);
-      page_ptr_->RLatch();
+      // page_ptr_->RLatch();
+      if (!page_ptr_->TryRLatch()) {
+        std::cout << "page " << old_page_ptr->GetPageId() << " RUnlatch" << std::endl;
+        old_page_ptr->RUnlatch();
+        buffer_pool_manager_->UnpinPage(old_page_id, false);
+
+        page_id_ = INVALID_PAGE_ID;
+        in_page_index_ = 0;
+        page_ptr_ = nullptr;
+        return *this;
+      }
     }
 
     std::cout << "page " << old_page_ptr->GetPageId() << " RUnlatch" << std::endl;

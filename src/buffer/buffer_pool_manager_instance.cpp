@@ -66,7 +66,6 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
   replacer_->RecordAccess(frame_id);
   replacer_->SetEvictable(frame_id, false);
 
-  std::cout << "[NewPgImp] frame_id: " << frame_id << " pin_count: " << pages_[frame_id].pin_count_ << std::endl;
   return &pages_[frame_id];
 }
 
@@ -77,7 +76,6 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
   if (page_table_->Find(page_id, frame_id)) {
     pages_[frame_id].pin_count_++;
     replacer_->SetEvictable(frame_id, false);
-    std::cout << "[FetchPgImp] frame_id: " << frame_id << " pin_count: " << pages_[frame_id].pin_count_ << std::endl;
     return &pages_[frame_id];
   }
 
@@ -101,7 +99,6 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
   replacer_->RecordAccess(frame_id);
   replacer_->SetEvictable(frame_id, false);
 
-  std::cout << "[FetchPgImp] frame_id: " << frame_id << " pin_count: " << pages_[frame_id].pin_count_ << std::endl;
   return &pages_[frame_id];
 }
 
@@ -125,7 +122,6 @@ auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> 
   if (--pages_[frame_id].pin_count_ == 0) {
     replacer_->SetEvictable(frame_id, true);
   }
-  std::cout << "[UnpinPgImp] frame_id: " << frame_id << " pin_count: " << pages_[frame_id].pin_count_ << std::endl;
 
   return true;
 }

@@ -152,7 +152,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveFirstItemToBackOf(B_PLUS_TREE_INTERNAL_
   internal_node->InsertAt(internal_node->GetSize(), KeyAt(0), ValueAt(0));
   RemoveAt(0);
 
-  buffer_pool_manager->UnpinPage(moved_page_id, true);
+  buffer_pool_manager->UnpinPage(moved_page_ptr->GetPageId(), true);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
