@@ -104,7 +104,7 @@ class IndexMetadata {
  * class Index - Base class for derived indices of different types
  *
  * The index structure majorly maintains information on the schema of the
- * schema of the underlying table and the mapping relation between index key
+ * underlying table and the mapping relation between index key
  * and tuple key, and provides an abstracted way for the external world to
  * interact with the underlying index implementation without exposing
  * the actual implementation's interface.
@@ -154,7 +154,7 @@ class Index {
   /**
    * Insert an entry into the index.
    * @param key The index key
-   * @param rid The RID associated with the key (unused)
+   * @param rid The RID associated with the key
    * @param transaction The transaction context
    */
   virtual void InsertEntry(const Tuple &key, RID rid, Transaction *transaction) = 0;

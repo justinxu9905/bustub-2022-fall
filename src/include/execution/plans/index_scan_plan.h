@@ -28,8 +28,6 @@ class IndexScanPlanNode : public AbstractPlanNode {
   /**
    * Creates a new index scan plan node.
    * @param output the output format of this scan plan node
-   * @param predicate the predicate to scan with, tuples are returned if predicate(tuple) == true or predicate ==
-   * nullptr
    * @param table_oid the identifier of table to be scanned
    */
   IndexScanPlanNode(SchemaRef output, index_oid_t index_oid)
@@ -42,14 +40,15 @@ class IndexScanPlanNode : public AbstractPlanNode {
 
   BUSTUB_PLAN_NODE_CLONE_WITH_CHILDREN(IndexScanPlanNode);
 
+  /** The table whose tuples should be scanned. */
+  index_oid_t index_oid_;
+
+  // Add anything you want here for index lookup
+
  protected:
   auto PlanNodeToString() const -> std::string override {
     return fmt::format("IndexScan {{ index_oid={} }}", index_oid_);
   }
-
- private:
-  /** The table whose tuples should be scanned. */
-  index_oid_t index_oid_;
 };
 
 }  // namespace bustub

@@ -34,6 +34,8 @@ class TopNPlanNode : public AbstractPlanNode {
    * Construct a new TopNPlanNode instance.
    * @param output The output schema of this topN plan node
    * @param child The child plan node
+   * @param order_bys The sort expressions and their order by types.
+   * @param n Retain n elements.
    */
   TopNPlanNode(SchemaRef output, AbstractPlanNodeRef child,
                std::vector<std::pair<OrderByType, AbstractExpressionRef>> order_bys, std::size_t n)
@@ -56,12 +58,11 @@ class TopNPlanNode : public AbstractPlanNode {
 
   BUSTUB_PLAN_NODE_CLONE_WITH_CHILDREN(TopNPlanNode);
 
- protected:
-  auto PlanNodeToString() const -> std::string override;
-
- private:
   std::vector<std::pair<OrderByType, AbstractExpressionRef>> order_bys_;
   std::size_t n_;
+
+ protected:
+  auto PlanNodeToString() const -> std::string override;
 };
 
 }  // namespace bustub

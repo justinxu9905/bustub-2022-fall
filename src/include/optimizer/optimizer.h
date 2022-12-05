@@ -12,6 +12,8 @@
 #include "execution/expressions/abstract_expression.h"
 #include "execution/plans/abstract_plan.h"
 
+#define BUSTUB_OPTIMIZER_HACK_REMOVE_AFTER_2022_FALL
+
 namespace bustub {
 
 /**
@@ -52,6 +54,16 @@ class Optimizer {
    * @brief optimize nested loop join into index join.
    */
   auto OptimizeNLJAsIndexJoin(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
+  /**
+   * @brief eliminate always true filter
+   */
+  auto OptimizeEliminateTrueFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
+  /**
+   * @brief merge filter into filter_predicate of seq scan plan node
+   */
+  auto OptimizeMergeFilterScan(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
   /**
    * @brief rewrite expression to be used in nested loop joins. e.g., if we have `SELECT * FROM a, b WHERE a.x = b.y`,
