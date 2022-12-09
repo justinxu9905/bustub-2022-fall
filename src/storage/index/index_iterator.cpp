@@ -27,7 +27,7 @@ INDEXITERATOR_TYPE::IndexIterator(Page *page_ptr, int index, BufferPoolManager *
 INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::~IndexIterator() {
   if (!IsEnd()) {
-    std::cout << "page " << page_ptr_->GetPageId() << " RUnlatch" << std::endl;
+    // std::cout << "page " << page_ptr_->GetPageId() << " RUnlatch" << std::endl;
     page_ptr_->RUnlatch();
     buffer_pool_manager_->UnpinPage(page_id_, false);
   }
@@ -60,8 +60,9 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
       page_ptr_ = nullptr;
     } else {
       page_ptr_ = buffer_pool_manager_->FetchPage(page_id_);
-      // page_ptr_->RLatch();
-      if (!page_ptr_->TryRLatch()) {
+      page_ptr_->RLatch();
+      /* Handle deadlock
+       * if (!page_ptr_->TryRLatch()) {
         std::cout << "page " << old_page_ptr->GetPageId() << " RUnlatch" << std::endl;
         old_page_ptr->RUnlatch();
         buffer_pool_manager_->UnpinPage(old_page_id, false);
@@ -70,10 +71,10 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
         in_page_index_ = 0;
         page_ptr_ = nullptr;
         return *this;
-      }
+      }*/
     }
 
-    std::cout << "page " << old_page_ptr->GetPageId() << " RUnlatch" << std::endl;
+    // std::cout << "page " << old_page_ptr->GetPageId() << " RUnlatch" << std::endl;
     old_page_ptr->RUnlatch();
     buffer_pool_manager_->UnpinPage(old_page_id, false);
   } else {

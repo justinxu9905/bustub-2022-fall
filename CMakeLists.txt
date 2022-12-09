@@ -275,8 +275,6 @@ add_custom_target(submit-p1
         )
 
 set(P2_FILES
-        "src/include/common/rwlatch.h"
-        "src/include/storage/page/page.h"
         "src/include/storage/page/b_plus_tree_page.h"
         "src/storage/page/b_plus_tree_page.cpp"
         "src/include/storage/page/b_plus_tree_internal_page.h"
