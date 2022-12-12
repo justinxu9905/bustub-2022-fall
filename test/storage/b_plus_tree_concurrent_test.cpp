@@ -399,7 +399,6 @@ TEST(BPlusTreeConcurrentTest, LargeTest) {
   for (auto iterator = tree.Begin(); iterator != tree.End(); ++iterator) {
     size = size + 1;
     auto val = (*iterator).second;
-    std::cout << val << std::endl;
     EXPECT_EQ(val.GetSlotNum(), 2 * size);
   }
   EXPECT_EQ(size, 500);

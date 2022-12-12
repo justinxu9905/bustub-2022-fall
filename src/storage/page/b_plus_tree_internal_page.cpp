@@ -112,16 +112,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::RemoveAt(int index) {
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::LookupIndex(const KeyType &key, const KeyComparator &comparator) const -> int {
-  // array_[i]: [array[i].first, array[i + 1].first)
-  // K(i) <= K < K(i+1)
-  // arr[0]: (-inf, arr[1].first)
-  // arr[1]: [arr[1].first, arr[2].first)
-  // arr[2]: [arr[2].first, +inf)
-  // size: 2
-  // std::cout << "[LookupIndex] size: " << GetSize() << " key: " << key << std::endl;
   for (int i = 1; i < GetSize(); i++) {
-    // std::cout << "key: " << key << " i: " << i << " arr[i].key: " << array_[i].first << " arr[i].id: " <<
-    // array_[i].second << std::endl;
     if (comparator(key, array_[i].first) < 0) {
       return i - 1;
     }
@@ -137,8 +128,6 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Lookup(const KeyType &key, const KeyCompara
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveFirstItemToBackOf(B_PLUS_TREE_INTERNAL_PAGE_TYPE *internal_node,
                                                            BufferPoolManager *buffer_pool_manager) {
-  // std::cout << "[Internal MoveFirstItemToBackOf] from " << GetPageId() << " to " << internal_node->GetPageId() <<
-  // std::endl;
   int size = GetSize();
   if (size == 0) {
     return;
@@ -158,8 +147,6 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveFirstItemToBackOf(B_PLUS_TREE_INTERNAL_
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveLastItemToFrontOf(B_PLUS_TREE_INTERNAL_PAGE_TYPE *internal_node,
                                                            BufferPoolManager *buffer_pool_manager) {
-  // std::cout << "[Internal MoveLastItemToFrontOf] from " << GetPageId() << " to " << internal_node->GetPageId() <<
-  // std::endl;
   int size = GetSize();
   if (size == 0) {
     return;

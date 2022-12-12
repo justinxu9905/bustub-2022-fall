@@ -97,10 +97,10 @@ class BPlusTree {
   void RedistributeOrCoalesce(N *node, Transaction *transaction);
 
   template <typename N>
-  void Redistribute(N *neighbor_node, N *node, bool from_prev);
+  void Redistribute(N *neighbor_node, N *cur_node, bool from_prev);
 
   template <typename N>
-  void Coalesce(N *neighbor_node, N *node, bool into_prev);
+  void Coalesce(N *neighbor_node, N *cur_node);
 
   void CleanupDeletedPages(Transaction *transaction);
 
