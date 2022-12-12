@@ -61,6 +61,7 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
     } else {
       page_ptr_ = buffer_pool_manager_->FetchPage(page_id_);
       page_ptr_->RLatch();
+      // std::cout << "page " << old_page_ptr->GetPageId() << " RLatch" << std::endl;
       /* Handle deadlock
        * if (!page_ptr_->TryRLatch()) {
         std::cout << "page " << old_page_ptr->GetPageId() << " RUnlatch" << std::endl;

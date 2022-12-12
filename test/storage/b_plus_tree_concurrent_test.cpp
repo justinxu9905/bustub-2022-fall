@@ -333,4 +333,82 @@ TEST(BPlusTreeConcurrentTest, MixTest) {
   remove("test.log");
 }
 
+TEST(BPlusTreeConcurrentTest, LargeTest) {
+  // create KeyComparator and index schema
+  auto key_schema = ParseCreateStatement("a bigint");
+  GenericComparator<8> comparator(key_schema.get());
+
+  auto *disk_manager = new DiskManager("test.db");
+  BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
+  // create b+ tree
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 3, 5);
+
+  // create and fetch header_page
+  page_id_t page_id;
+  auto header_page = bpm->NewPage(&page_id);
+  (void)header_page;
+  // first, populate index
+  std::vector<int64_t> keys = {};
+  std::vector<int64_t> removed_keys = {};
+
+  // concurrent insert
+  keys.clear();
+  for (int i = 1; i <= 1000; i += 2) {
+    keys.push_back(i);
+  }
+  LaunchParallelTest(1, InsertHelper, &tree, keys);
+
+  int64_t size = 0;
+  for (auto iterator = tree.Begin(); iterator != tree.End(); ++iterator) {
+    size = size + 1;
+    auto val = (*iterator).second;
+    EXPECT_EQ(val.GetSlotNum(), 2 * size - 1);
+  }
+  EXPECT_EQ(size, 500);
+
+  // mixed insert and remove
+  removed_keys.clear();
+  for (int i = 1; i <= 1000; i += 2) {
+    removed_keys.push_back(i);
+  }
+
+  keys.clear();
+  for (int i = 2; i <= 1000; i += 2) {
+    keys.push_back(i);
+  }
+
+  // LaunchParallelTest(5, InsertHelper, &tree, keys);
+  // LaunchParallelTest(5, DeleteHelper, &tree, removed_keys);
+  std::vector<std::thread> thread_group;
+
+  // Launch a group of threads
+  for (uint64_t thread_itr = 0; thread_itr < 10; ++thread_itr) {
+    if (thread_itr % 2) {
+      thread_group.push_back(std::thread(InsertHelper, &tree, keys, thread_itr));
+    } else {
+      thread_group.push_back(std::thread(DeleteHelper, &tree, removed_keys, thread_itr));
+    }
+  }
+
+  // Join the threads with the main thread
+  for (uint64_t thread_itr = 0; thread_itr < 10; ++thread_itr) {
+    thread_group[thread_itr].join();
+  }
+
+  size = 0;
+  for (auto iterator = tree.Begin(); iterator != tree.End(); ++iterator) {
+    size = size + 1;
+    auto val = (*iterator).second;
+    std::cout << val << std::endl;
+    EXPECT_EQ(val.GetSlotNum(), 2 * size);
+  }
+  EXPECT_EQ(size, 500);
+
+  bpm->UnpinPage(HEADER_PAGE_ID, true);
+  delete disk_manager;
+  delete bpm;
+  remove("test.db");
+  remove("test.log");
+}
+
 }  // namespace bustub
