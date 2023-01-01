@@ -55,11 +55,11 @@ class InsertExecutor : public AbstractExecutor {
   auto GetOutputSchema() const -> const Schema & override { return plan_->OutputSchema(); };
 
  private:
-  /** The insert plan node to be executed*/
+  /** The insert plan node to be executed */
   const InsertPlanNode *plan_;
   /** The child executor from which tuples are obtained */
   std::unique_ptr<AbstractExecutor> child_executor_;
-  /** Whether the Next() has been called before **/
+  /** Whether the Next() has been called before */
   bool called_;
 };
 

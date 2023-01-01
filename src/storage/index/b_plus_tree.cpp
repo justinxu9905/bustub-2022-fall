@@ -530,6 +530,11 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
   root_latch_.RLock();
   page_id_t page_id = root_page_id_;
+  if (page_id == INVALID_PAGE_ID) {
+    root_latch_.RUnlock();
+    return End();
+  }
+
   Page *page_ptr = nullptr;
   Page *prev_page_ptr = nullptr;
   while (true) {
