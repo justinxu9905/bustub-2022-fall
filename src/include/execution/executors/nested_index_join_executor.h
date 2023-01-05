@@ -45,10 +45,20 @@ class NestIndexJoinExecutor : public AbstractExecutor {
 
   void Init() override;
 
+  auto AntiLeftJoinTuple(Tuple *left_tuple) -> Tuple;
+
+  auto InnerJoinTuple(Tuple *left_tuple, Tuple *right_tuple) -> Tuple;
+
   auto Next(Tuple *tuple, RID *rid) -> bool override;
 
  private:
-  /** The nested index join plan node. */
+  /** The nested index join plan node */
   const NestedIndexJoinPlanNode *plan_;
+  /** The child executor from which tuples are obtained */
+  std::unique_ptr<AbstractExecutor> child_executor_;
+  /** Result of ScanKey() for inner table */
+  std::vector<RID> right_result_;
+  /** Fetched tuple from left child */
+  Tuple left_tuple_;
 };
 }  // namespace bustub
