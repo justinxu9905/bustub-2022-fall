@@ -75,30 +75,42 @@ class SimpleAggregationHashTable {
           result->aggregates_[i] = result->aggregates_[i].Add(ValueFactory::GetIntegerValue(1));
           break;
         case AggregationType::CountAggregate:
+          if (input.aggregates_[i].IsNull()) {
+            break;
+          }
           if (result->aggregates_[i].IsNull()) {
             result->aggregates_[i] = ValueFactory::GetIntegerValue(1);
-          } else if (!input.aggregates_[i].IsNull()) {
+          } else {
             result->aggregates_[i] = result->aggregates_[i].Add(ValueFactory::GetIntegerValue(1));
           }
           break;
         case AggregationType::SumAggregate:
+          if (input.aggregates_[i].IsNull()) {
+            break;
+          }
           if (result->aggregates_[i].IsNull()) {
             result->aggregates_[i] = input.aggregates_[i];
-          } else if (!input.aggregates_[i].IsNull()) {
+          } else {
             result->aggregates_[i] = result->aggregates_[i].Add(input.aggregates_[i]);
           }
           break;
         case AggregationType::MinAggregate:
+          if (input.aggregates_[i].IsNull()) {
+            break;
+          }
           if (result->aggregates_[i].IsNull()) {
             result->aggregates_[i] = input.aggregates_[i];
-          } else if (!input.aggregates_[i].IsNull()) {
+          } else {
             result->aggregates_[i] = result->aggregates_[i].Min(input.aggregates_[i]);
           }
           break;
         case AggregationType::MaxAggregate:
+          if (input.aggregates_[i].IsNull()) {
+            break;
+          }
           if (result->aggregates_[i].IsNull()) {
             result->aggregates_[i] = input.aggregates_[i];
-          } else if (!input.aggregates_[i].IsNull()) {
+          } else {
             result->aggregates_[i] = result->aggregates_[i].Max(input.aggregates_[i]);
           }
           break;
