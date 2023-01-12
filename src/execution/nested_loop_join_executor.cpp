@@ -44,7 +44,7 @@ auto NestedLoopJoinExecutor::AntiLeftJoinTuple(Tuple *left_tuple) -> Tuple {
   values.reserve(GetOutputSchema().GetColumnCount());
 
   for (uint32_t idx = 0; idx < left_executor_->GetOutputSchema().GetColumnCount(); idx++) {
-    values.push_back(left_tuple_.GetValue(&left_executor_->GetOutputSchema(), idx));
+    values.push_back(left_tuple->GetValue(&left_executor_->GetOutputSchema(), idx));
   }
   for (uint32_t idx = 0; idx < right_executor_->GetOutputSchema().GetColumnCount(); idx++) {
     values.push_back(ValueFactory::GetNullValueByType(plan_->GetRightPlan()->OutputSchema().GetColumn(idx).GetType()));
