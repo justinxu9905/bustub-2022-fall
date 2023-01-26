@@ -63,7 +63,8 @@ auto Optimizer::OptimizeNLJPickIndex(const AbstractPlanNodeRef &plan) -> Abstrac
                   }
                 }
                 if (left_expr->GetTupleIdx() == 1 && right_expr->GetTupleIdx() == 0) {
-                  if (auto index = MatchIndex(left_seq_scan.table_name_, left_expr->GetColIdx()); index != std::nullopt) {
+                  if (auto index = MatchIndex(left_seq_scan.table_name_, left_expr->GetColIdx());
+                      index != std::nullopt) {
                     auto [index_oid, index_name] = *index;
                     return std::make_shared<NestedLoopJoinPlanNode>(nlj_plan.output_schema_, nlj_plan.GetRightPlan(),
                                                                     nlj_plan.GetLeftPlan(), nlj_plan.predicate_,

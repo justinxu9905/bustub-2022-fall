@@ -63,6 +63,14 @@ class LockManager {
 
   class LockRequestQueue {
    public:
+    ~LockRequestQueue() {
+      while (!request_queue_.empty()) {
+        auto *lock_request = request_queue_.front();
+        request_queue_.pop_front();
+        delete lock_request;
+      }
+    }
+
     /** List of lock requests for the same resource (table or row) */
     std::list<LockRequest *> request_queue_;
     /** For notifying blocked transactions on this rid */
@@ -192,7 +200,7 @@ class LockManager {
    *        Unlocking X locks should set the transaction state to SHRINKING.
    *        Unlocking S locks does not affect transaction state.
    *
-   *   READ_UNCOMMITTED:
+   *    READ_UNCOMMITTED:
    *        Unlocking X locks should set the transaction state to SHRINKING.
    *        S locks are not permitted under READ_UNCOMMITTED.
    *            The behaviour upon unlocking an S lock under this isolation level is undefined.
@@ -298,6 +306,8 @@ class LockManager {
   auto RunCycleDetection() -> void;
 
  private:
+  auto UpdateTableLockSet(Transaction *txn, LockRequest *lock_request, bool insert) -> void;
+  auto GrantLock(LockRequest *lock_request, LockRequestQueue *lock_request_queue) -> bool;
   /** Fall 2022 */
   /** Structure that holds lock requests for a given table oid */
   std::unordered_map<table_oid_t, std::shared_ptr<LockRequestQueue>> table_lock_map_;
