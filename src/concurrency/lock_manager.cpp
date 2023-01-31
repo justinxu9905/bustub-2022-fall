@@ -109,26 +109,54 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
           break;
       }
 
-      lock_request_queue->request_queue_.remove(lock_request);
-      auto *new_lock_request = new LockRequest(txn->GetTransactionId(), lock_mode, oid);
-      if (!GrantLock(new_lock_request, lock_request_queue)) {
-        lock_request_queue->request_queue_.push_front(lock_request);
-        lock_request_queue->request_queue_.emplace_back();
+      // handle upgrade conflict
+      if (lock_request_queue->upgrading_ != INVALID_TXN_ID) {
         lock_request_queue->latch_.unlock();
-        delete new_lock_request;
-        return true;
+        txn->SetState(TransactionState::ABORTED);
+        throw bustub::TransactionAbortException(txn->GetTransactionId(), AbortReason::UPGRADE_CONFLICT);
       }
-      lock_request_queue->request_queue_.push_front(new_lock_request);
+
+      // insert upgrade lock request
+      lock_request_queue->request_queue_.remove(lock_request);
+      UpdateTableLockSet(txn, lock_request, false);
+      delete lock_request;
+      auto *upgrade_lock_request = new LockRequest(txn->GetTransactionId(), lock_mode, oid);
+
+      std::list<LockRequest *>::iterator lr_iter;
+      for (lr_iter = lock_request_queue->request_queue_.begin(); lr_iter != lock_request_queue->request_queue_.end();
+           lr_iter++) {
+        if (!(*lr_iter)->granted_) {
+          break;
+        }
+      }
+      lock_request_queue->request_queue_.insert(lr_iter, upgrade_lock_request);
+      lock_request_queue->upgrading_ = txn->GetTransactionId();
 
       lock_request_queue->latch_.unlock();
 
       txn->SetState(TransactionState::GROWING);
 
+      // wait to be granted
+      std::unique_lock<std::mutex> lock(lock_request_queue->latch_);
+      while (!GrantLock(upgrade_lock_request, lock_request_queue)) {
+        lock_request_queue->cv_.wait(lock);
+        if (txn->GetState() == TransactionState::ABORTED) {
+          lock_request_queue->upgrading_ = INVALID_TXN_ID;
+          lock_request_queue->request_queue_.remove(upgrade_lock_request);
+          delete upgrade_lock_request;
+          lock_request_queue->cv_.notify_all();
+          return false;
+        }
+      }
+
       // update lock request and txn lock set
-      new_lock_request->granted_ = true;
-      UpdateTableLockSet(txn, lock_request, false);
-      UpdateTableLockSet(txn, new_lock_request, true);
-      delete lock_request;
+      lock_request_queue->upgrading_ = INVALID_TXN_ID;
+      upgrade_lock_request->granted_ = true;
+      UpdateTableLockSet(txn, upgrade_lock_request, true);
+
+      if (lock_mode != LockMode::EXCLUSIVE) {
+        lock_request_queue->cv_.notify_all();
+      }
       return true;
     }
   }
@@ -153,13 +181,14 @@ auto LockManager::LockTable(Transaction *txn, LockMode lock_mode, const table_oi
     }
   }
 
+  // update lock request and txn lock set
+  lock_request->granted_ = true;
+  UpdateTableLockSet(txn, lock_request, true);
+
   if (lock_mode != LockMode::EXCLUSIVE) {
     lock_request_queue->cv_.notify_all();
   }
 
-  // update lock request and txn lock set
-  lock_request->granted_ = true;
-  UpdateTableLockSet(txn, lock_request, true);
   return true;
 }
 

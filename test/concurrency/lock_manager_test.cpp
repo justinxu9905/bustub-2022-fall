@@ -274,13 +274,18 @@ void TableLockUpgradeTest2() {
   t2.join();
   t3.join();
 
-  /** Upgrade S to X */
-  EXPECT_EQ(true, lock_mgr.LockTable(txns[0], LockManager::LockMode::EXCLUSIVE, oid));
-  CheckTableLockSizes(txns[0], 1, 0, 0, 0, 0);
+  std::thread t4 = std::thread{lock_task, 0, LockManager::LockMode::EXCLUSIVE};
+  sleep(1);
+  CheckTableLockSizes(txns[0], 0, 0, 0, 0, 0);
 
   /** Unlock */
   EXPECT_EQ(true, lock_mgr.UnlockTable(txns[1], oid));
-  CheckTableLockSizes(txns[1], 0, 0, 0, 0, 0);
+  CheckTableLockSizes(txns[0], 0, 0, 0, 0, 0);
+
+  EXPECT_EQ(true, lock_mgr.UnlockTable(txns[2], oid));
+  t4.join();
+
+  CheckTableLockSizes(txns[0], 0, 1, 0, 0, 0);
 
   /** Clean up */
   for (int i = 0; i < num_txns; i++) {
