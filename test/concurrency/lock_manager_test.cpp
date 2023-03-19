@@ -7,6 +7,7 @@
 #include <random>
 #include <thread>  // NOLINT
 
+#include "common/bustub_instance.h"
 #include "common/config.h"
 #include "concurrency/transaction_manager.h"
 #include "gtest/gtest.h"
@@ -398,6 +399,28 @@ void RowLockTest1() {
 }
 TEST(LockManagerTest, RowLockTest1) { RowLockTest1(); }  // NOLINT
 
+void RowLockUpgradeTest() {
+  LockManager lock_mgr{};
+  TransactionManager txn_mgr{&lock_mgr};
+
+  table_oid_t oid = 0;
+  RID rid{0, 0};
+  auto txn = txn_mgr.Begin();
+
+  EXPECT_TRUE(lock_mgr.LockTable(txn, LockManager::LockMode::INTENTION_SHARED, oid));
+  EXPECT_TRUE(lock_mgr.LockRow(txn, LockManager::LockMode::SHARED, oid, rid));
+  EXPECT_TRUE(lock_mgr.LockTable(txn, LockManager::LockMode::SHARED, oid));
+
+  try {
+    lock_mgr.LockRow(txn, LockManager::LockMode::EXCLUSIVE, oid, rid);
+  } catch (TransactionAbortException &e) {
+    CheckAborted(txn);
+  }
+
+  delete txn;
+}
+TEST(LockManagerTest, RowLockUpgradeTest) { RowLockUpgradeTest(); }  // NOLINT
+
 void TwoPLTest1() {
   LockManager lock_mgr{};
   TransactionManager txn_mgr{&lock_mgr};
@@ -446,5 +469,158 @@ void TwoPLTest1() {
 }
 
 TEST(LockManagerTest, TwoPLTest1) { TwoPLTest1(); }  // NOLINT
+
+TEST(LockManagerTest, CompatibilityTest1) {
+  LockManager lock_mgr{};
+  TransactionManager txn_mgr{&lock_mgr};
+  table_oid_t oid = 0;
+  auto *txn0 = txn_mgr.Begin();
+  auto *txn1 = txn_mgr.Begin();
+  auto *txn2 = txn_mgr.Begin();
+  // [S] SIX IS
+  // [SIX IS]
+  std::thread t0([&]() {
+    bool res;
+    res = lock_mgr.LockTable(txn0, LockManager::LockMode::SHARED, oid);
+    EXPECT_TRUE(res);
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    CheckTableLockSizes(txn1, 0, 0, 0, 0, 0);
+    CheckTableLockSizes(txn2, 0, 0, 0, 0, 0);
+    lock_mgr.UnlockTable(txn0, oid);
+    txn_mgr.Commit(txn0);
+  });
+
+  std::thread t1([&]() {
+    bool res;
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    res = lock_mgr.LockTable(txn1, LockManager::LockMode::SHARED_INTENTION_EXCLUSIVE, oid);
+    EXPECT_TRUE(res);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    CheckTableLockSizes(txn2, 0, 0, 1, 0, 0);
+    res = lock_mgr.UnlockTable(txn1, oid);
+    txn_mgr.Commit(txn1);
+  });
+
+  std::thread t2([&]() {
+    bool res;
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    res = lock_mgr.LockTable(txn2, LockManager::LockMode::INTENTION_SHARED, oid);
+    EXPECT_TRUE(res);
+    std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    res = lock_mgr.UnlockTable(txn2, oid);
+    txn_mgr.Commit(txn2);
+  });
+
+  t0.join();
+  t1.join();
+  t2.join();
+  delete txn0;
+  delete txn1;
+  delete txn2;
+}
+
+TEST(LockManagerTest, CompatibilityTest2) {
+  LockManager lock_mgr{};
+  TransactionManager txn_mgr{&lock_mgr};
+  table_oid_t oid = 0;
+  auto *txn0 = txn_mgr.Begin();
+  auto *txn1 = txn_mgr.Begin();
+  auto *txn2 = txn_mgr.Begin();
+  // [IS IX] SIX
+  // [IS SIX]
+  std::thread t0([&]() {
+    bool res;
+    res = lock_mgr.LockTable(txn0, LockManager::LockMode::INTENTION_SHARED, oid);
+    EXPECT_TRUE(res);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    CheckTableLockSizes(txn0, 0, 0, 1, 0, 0);
+    CheckTableLockSizes(txn1, 0, 0, 0, 1, 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    CheckTableLockSizes(txn0, 0, 0, 1, 0, 0);
+    CheckTableLockSizes(txn1, 0, 0, 0, 0, 0);
+    CheckTableLockSizes(txn2, 0, 0, 0, 0, 1);
+    lock_mgr.UnlockTable(txn0, oid);
+    txn_mgr.Commit(txn0);
+  });
+
+  std::thread t1([&]() {
+    bool res;
+    res = lock_mgr.LockTable(txn1, LockManager::LockMode::INTENTION_EXCLUSIVE, oid);
+    EXPECT_TRUE(res);
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    res = lock_mgr.UnlockTable(txn1, oid);
+    txn_mgr.Commit(txn1);
+  });
+
+  std::thread t2([&]() {
+    bool res;
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    res = lock_mgr.LockTable(txn2, LockManager::LockMode::SHARED_INTENTION_EXCLUSIVE, oid);
+    EXPECT_TRUE(res);
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    res = lock_mgr.UnlockTable(txn2, oid);
+    txn_mgr.Commit(txn2);
+  });
+
+  t0.join();
+  t1.join();
+  t2.join();
+
+  delete txn0;
+  delete txn1;
+  delete txn2;
+}
+
+TEST(LockManagerTest, CompatibilityTest3) {
+  LockManager lock_mgr{};
+  TransactionManager txn_mgr{&lock_mgr};
+  table_oid_t oid = 0;
+
+  auto *txn0 = txn_mgr.Begin();
+  auto *txn1 = txn_mgr.Begin();
+  auto *txn2 = txn_mgr.Begin();
+  // [SIX] SIX IS
+  // [SIX] [IS]
+  std::thread t0([&]() {
+    bool res;
+    res = lock_mgr.LockTable(txn0, LockManager::LockMode::SHARED_INTENTION_EXCLUSIVE, oid);
+    EXPECT_TRUE(res);
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    CheckTableLockSizes(txn1, 0, 0, 0, 0, 0);
+    CheckTableLockSizes(txn2, 0, 0, 0, 0, 0);
+    lock_mgr.UnlockTable(txn0, oid);
+    txn_mgr.Commit(txn0);
+  });
+
+  std::thread t1([&]() {
+    bool res;
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    res = lock_mgr.LockTable(txn1, LockManager::LockMode::SHARED_INTENTION_EXCLUSIVE, oid);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    EXPECT_TRUE(res);
+    CheckTableLockSizes(txn1, 0, 0, 0, 0, 1);
+    CheckTableLockSizes(txn2, 0, 0, 1, 0, 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    res = lock_mgr.UnlockTable(txn1, oid);
+    txn_mgr.Commit(txn1);
+  });
+
+  std::thread t2([&]() {
+    bool res;
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    res = lock_mgr.LockTable(txn2, LockManager::LockMode::INTENTION_SHARED, oid);
+    EXPECT_TRUE(res);
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    res = lock_mgr.UnlockTable(txn2, oid);
+    txn_mgr.Commit(txn2);
+  });
+
+  t0.join();
+  t1.join();
+  t2.join();
+  delete txn0;
+  delete txn1;
+  delete txn2;
+}
 
 }  // namespace bustub
