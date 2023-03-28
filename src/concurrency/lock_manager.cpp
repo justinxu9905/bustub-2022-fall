@@ -399,21 +399,121 @@ auto LockManager::UnlockRow(Transaction *txn, const table_oid_t &oid, const RID 
   throw TransactionAbortException(txn->GetTransactionId(), AbortReason::ATTEMPTED_UNLOCK_BUT_NO_LOCK_HELD);
 }
 
-void LockManager::AddEdge(txn_id_t t1, txn_id_t t2) {}
+void LockManager::AddEdge(txn_id_t t1, txn_id_t t2) {
+  waits_for_[t1].push_back(t2);
+  txn_set_.insert(t1);
+  txn_set_.insert(t2);
+}
 
-void LockManager::RemoveEdge(txn_id_t t1, txn_id_t t2) {}
+void LockManager::RemoveEdge(txn_id_t t1, txn_id_t t2) {
+  auto iter = std::find(waits_for_[t1].begin(), waits_for_[t1].end(), t2);
+  if (iter != waits_for_[t1].end()) {
+    waits_for_[t1].erase(iter);
+  }
+}
 
-auto LockManager::HasCycle(txn_id_t *txn_id) -> bool { return false; }
+auto LockManager::HasCycle(txn_id_t *txn_id) -> bool {
+  for (auto start_txn_id : txn_set_) {
+    if (DfsCircularDependency(start_txn_id)) {
+      *txn_id = *active_set_.begin();
+      for (auto const &active_txn_id : active_set_) {
+        *txn_id = std::max(*txn_id, active_txn_id);
+      }
+      active_set_.clear();
+      return true;
+    }
+    active_set_.clear();
+  }
+  return false;
+}
 
 auto LockManager::GetEdgeList() -> std::vector<std::pair<txn_id_t, txn_id_t>> {
   std::vector<std::pair<txn_id_t, txn_id_t>> edges(0);
+  for (auto const &pair : waits_for_) {
+    auto t1 = pair.first;
+    for (auto const &t2 : pair.second) {
+      edges.emplace_back(t1, t2);
+    }
+  }
   return edges;
 }
 
 void LockManager::RunCycleDetection() {
   while (enable_cycle_detection_) {
     std::this_thread::sleep_for(cycle_detection_interval);
-    {  // TODO(students): detect deadlock
+    {
+      // build up waits_for_ graph
+      table_lock_map_latch_.lock();
+      row_lock_map_latch_.lock();
+
+      for (auto &pair : table_lock_map_) {
+        std::unordered_set<txn_id_t> granted_set;
+        pair.second->latch_.lock();
+        for (auto const &lock_request : pair.second->request_queue_) {
+          if (lock_request->granted_) {
+            granted_set.emplace(lock_request->txn_id_);
+          } else {
+            for (auto granted_txn_id : granted_set) {
+              waits_for_oid_.emplace(lock_request->txn_id_, lock_request->oid_);
+              AddEdge(lock_request->txn_id_, granted_txn_id);
+            }
+          }
+        }
+        pair.second->latch_.unlock();
+      }
+
+      for (auto &pair : row_lock_map_) {
+        std::unordered_set<txn_id_t> granted_set;
+        pair.second->latch_.lock();
+        for (auto const &lock_request : pair.second->request_queue_) {
+          if (lock_request->granted_) {
+            granted_set.emplace(lock_request->txn_id_);
+          } else {
+            for (auto granted_txn_id : granted_set) {
+              waits_for_rid_.emplace(lock_request->txn_id_, lock_request->rid_);
+              AddEdge(lock_request->txn_id_, granted_txn_id);
+            }
+          }
+        }
+        pair.second->latch_.unlock();
+      }
+
+      row_lock_map_latch_.unlock();
+      table_lock_map_latch_.unlock();
+
+      // break circular dependency
+      txn_id_t txn_id;
+      while (HasCycle(&txn_id)) {
+        Transaction *txn = TransactionManager::GetTransaction(txn_id);
+        txn->SetState(TransactionState::ABORTED);
+
+        // remove txn_id from waits_for_ graph
+        waits_for_.erase(txn_id);
+        for (auto waiting_txn_id : txn_set_) {
+          if (waiting_txn_id != txn_id) {
+            RemoveEdge(waiting_txn_id, txn_id);
+          }
+        }
+
+        if (waits_for_oid_.count(txn_id) > 0) {
+          table_lock_map_[waits_for_oid_[txn_id]]->latch_.lock();
+          table_lock_map_[waits_for_oid_[txn_id]]->cv_.notify_all();
+          table_lock_map_[waits_for_oid_[txn_id]]->latch_.unlock();
+        }
+
+        if (waits_for_rid_.count(txn_id) > 0) {
+          row_lock_map_[waits_for_rid_[txn_id]]->latch_.lock();
+          row_lock_map_[waits_for_rid_[txn_id]]->cv_.notify_all();
+          row_lock_map_[waits_for_rid_[txn_id]]->latch_.unlock();
+        }
+      }
+
+      // clear up relevant data
+      waits_for_.clear();
+      safe_set_.clear();
+      txn_set_.clear();
+      waits_for_oid_.clear();
+      waits_for_rid_.clear();
     }
   }
 }
@@ -526,6 +626,28 @@ auto LockManager::GrantLock(const std::shared_ptr<LockRequest> &lock_request,
     }
   }
 
+  return false;
+}
+
+auto LockManager::DfsCircularDependency(txn_id_t txn_id) -> bool {
+  if (safe_set_.find(txn_id) != safe_set_.end()) {
+    return false;
+  }
+  if (active_set_.find(txn_id) != active_set_.end()) {
+    return true;
+  }
+  active_set_.insert(txn_id);
+
+  std::vector<txn_id_t> next_txn_vector = waits_for_[txn_id];
+  std::sort(next_txn_vector.begin(), next_txn_vector.end());
+  for (auto next_txn_id : next_txn_vector) {
+    if (DfsCircularDependency(next_txn_id)) {
+      return true;
+    }
+  }
+
+  active_set_.erase(txn_id);
+  safe_set_.insert(txn_id);
   return false;
 }
 

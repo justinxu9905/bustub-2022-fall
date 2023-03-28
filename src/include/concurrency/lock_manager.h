@@ -17,6 +17,7 @@
 #include <list>
 #include <memory>
 #include <mutex>  // NOLINT
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -302,6 +303,7 @@ class LockManager {
   auto UpdateRowLockSet(Transaction *txn, const std::shared_ptr<LockRequest> &lock_request, bool insert) -> void;
   auto GrantLock(const std::shared_ptr<LockRequest> &lock_request,
                  const std::shared_ptr<LockRequestQueue> &lock_request_queue) -> bool;
+  auto DfsCircularDependency(txn_id_t txn_id) -> bool;
   /** Fall 2022 */
   /** Structure that holds lock requests for a given table oid */
   std::unordered_map<table_oid_t, std::shared_ptr<LockRequestQueue>> table_lock_map_;
@@ -318,6 +320,11 @@ class LockManager {
   /** Waits-for graph representation. */
   std::unordered_map<txn_id_t, std::vector<txn_id_t>> waits_for_;
   std::mutex waits_for_latch_;
+  std::set<txn_id_t> txn_set_;
+  std::unordered_set<txn_id_t> active_set_;
+  std::unordered_set<txn_id_t> safe_set_;
+  std::unordered_map<txn_id_t, table_oid_t> waits_for_oid_;
+  std::unordered_map<txn_id_t, RID> waits_for_rid_;
 };
 
 }  // namespace bustub
