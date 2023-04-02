@@ -23,6 +23,18 @@ InsertExecutor::InsertExecutor(ExecutorContext *exec_ctx, const InsertPlanNode *
 void InsertExecutor::Init() {
   child_executor_->Init();
   called_ = false;
+
+  // acquire the table lock
+  try {
+    bool is_locked = GetExecutorContext()->GetLockManager()->LockTable(
+        GetExecutorContext()->GetTransaction(), LockManager::LockMode::INTENTION_EXCLUSIVE,
+        GetExecutorContext()->GetCatalog()->GetTable(plan_->TableOid())->oid_);
+    if (!is_locked) {
+      throw ExecutionException("Insert Executor Get Table Lock Failed");
+    }
+  } catch (TransactionAbortException &e) {
+    throw ExecutionException("Insert Executor Get Table Lock Failed");
+  }
 }
 
 auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
@@ -34,6 +46,17 @@ auto InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   Tuple child_tuple{};
   int size = 0;
   while (child_executor_->Next(&child_tuple, rid)) {
+    // acquire the row lock
+    try {
+      bool is_locked = GetExecutorContext()->GetLockManager()->LockRow(
+          GetExecutorContext()->GetTransaction(), LockManager::LockMode::EXCLUSIVE, table_info->oid_, *rid);
+      if (!is_locked) {
+        throw ExecutionException("Insert Executor Get Row Lock Failed");
+      }
+    } catch (TransactionAbortException &e) {
+      throw ExecutionException("Insert Executor Get Row Lock Failed");
+    }
+
     table_heap->InsertTuple(child_tuple, rid, tx);
 
     for (auto &index_info : index_info_vector) {
