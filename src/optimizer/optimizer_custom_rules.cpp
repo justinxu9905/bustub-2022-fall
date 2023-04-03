@@ -14,6 +14,7 @@ namespace bustub {
 auto Optimizer::OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
   auto p = plan;
   p = OptimizeMergeProjection(p);
+  p = OptimizeMergeFilterScan(p);
   p = OptimizeMergeFilterNLJ(p);
   // p = OptimizeNLJPickIndex(p);
   p = OptimizeNLJAsIndexJoin(p);

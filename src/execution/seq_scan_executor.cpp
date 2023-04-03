@@ -39,26 +39,31 @@ void SeqScanExecutor::Init() {
 }
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
-  if (iter_ == GetExecutorContext()->GetCatalog()->GetTable(plan_->GetTableOid())->table_->End()) {
-    // release row locks
-    if (GetExecutorContext()->GetTransaction()->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
-      const auto locked_row_set = GetExecutorContext()->GetTransaction()->GetSharedRowLockSet()->at(
-          GetExecutorContext()->GetCatalog()->GetTable(plan_->table_oid_)->oid_);
-      table_oid_t oid = GetExecutorContext()->GetCatalog()->GetTable(plan_->table_oid_)->oid_;
-      for (auto locked_rid : locked_row_set) {
-        GetExecutorContext()->GetLockManager()->UnlockRow(GetExecutorContext()->GetTransaction(), oid, locked_rid);
+  do {
+    if (iter_ == GetExecutorContext()->GetCatalog()->GetTable(plan_->GetTableOid())->table_->End()) {
+      // release row locks
+      if (GetExecutorContext()->GetTransaction()->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
+        const auto locked_row_set = GetExecutorContext()->GetTransaction()->GetSharedRowLockSet()->at(
+            GetExecutorContext()->GetCatalog()->GetTable(plan_->table_oid_)->oid_);
+        table_oid_t oid = GetExecutorContext()->GetCatalog()->GetTable(plan_->table_oid_)->oid_;
+        for (auto locked_rid : locked_row_set) {
+          GetExecutorContext()->GetLockManager()->UnlockRow(GetExecutorContext()->GetTransaction(), oid, locked_rid);
+        }
+
+        GetExecutorContext()->GetLockManager()->UnlockTable(
+            GetExecutorContext()->GetTransaction(),
+            GetExecutorContext()->GetCatalog()->GetTable(plan_->table_oid_)->oid_);
       }
-
-      GetExecutorContext()->GetLockManager()->UnlockTable(
-          GetExecutorContext()->GetTransaction(),
-          GetExecutorContext()->GetCatalog()->GetTable(plan_->table_oid_)->oid_);
+      return false;
     }
-    return false;
-  }
 
-  *tuple = *iter_;
-  *rid = iter_->GetRid();
-  iter_++;
+    *tuple = *iter_;
+    *rid = iter_->GetRid();
+    iter_++;
+  } while (plan_->filter_predicate_ != nullptr &&
+           !plan_->filter_predicate_
+                ->Evaluate(tuple, GetExecutorContext()->GetCatalog()->GetTable(plan_->GetTableOid())->schema_)
+                .GetAs<bool>());
 
   // acquire the row lock
   if (GetExecutorContext()->GetTransaction()->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED) {
