@@ -71,6 +71,11 @@ class Optimizer {
   auto OptimizeMergeFilterScan(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
   /**
+   * @brief merge filter into filter_predicate of index scan plan node
+   */
+  auto OptimizeMergeFilterIndexScan(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
+  /**
    * @brief rewrite expression to be used in nested loop joins. e.g., if we have `SELECT * FROM a, b WHERE a.x = b.y`,
    * we will have `#0.x = #0.y` in the filter plan node. We will need to figure out where does `0.x` and `0.y` belong
    * in NLJ (left table or right table?), and rewrite it as `#0.x = #1.y`.

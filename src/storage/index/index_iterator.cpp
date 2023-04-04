@@ -15,7 +15,7 @@ INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::IndexIterator() = default;
 
 INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE::IndexIterator(Page *page_ptr, int index, BufferPoolManager *buffer_pool_manager)
+INDEXITERATOR_TYPE::IndexIterator(Page *page_ptr, BufferPoolManager *buffer_pool_manager, int index)
     : buffer_pool_manager_(buffer_pool_manager), page_ptr_(page_ptr), in_page_index_(index) {
   if (page_ptr_ == nullptr) {
     page_id_ = INVALID_PAGE_ID;

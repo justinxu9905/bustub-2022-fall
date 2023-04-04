@@ -24,7 +24,7 @@ class IndexIterator {
  public:
   // you may define your own constructor based on your member variables
   IndexIterator();
-  IndexIterator(Page *page_ptr, int index, BufferPoolManager *buffer_pool_manager);
+  IndexIterator(Page *page_ptr, BufferPoolManager *buffer_pool_manager, int index = 0);
   ~IndexIterator();  // NOLINT
 
   auto IsEnd() -> bool;
